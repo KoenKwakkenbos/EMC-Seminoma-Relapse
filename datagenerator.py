@@ -31,8 +31,8 @@ class MILdatagen(tf.keras.utils.Sequence):
 
     def __getitem__(self, idx):
         slide_path = self._csv_slides['slide'][idx]
-        y = np.array(int(self._csv_slides['relapse'][idx]))
-        
+        y = tf.keras.utils.to_categorical([self._csv_slides['relapse'][idx]], num_classes=2)
+
         tile_list = os.listdir(slide_path)
 
         with ThreadPoolExecutor(max_workers=32) as executor:
