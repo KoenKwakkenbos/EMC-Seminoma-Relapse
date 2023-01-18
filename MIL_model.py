@@ -109,4 +109,10 @@ class MILAttentionLayer(layers.Layer):
         # w^T*(tanh(v*h_k^T)) / w^T*(tanh(v*h_k^T)*sigmoid(u*h_k^T))
         return tf.tensordot(instance, self.w_weight_params, axes=1)
 
-        
+
+class ReductionLayer(layers.Layer):
+    def __init__(self):
+        super(ReductionLayer, self).__init__()
+
+    def call(self, inputs):
+        return tf.expand_dims(tf.reduce_sum(inputs, axis=0), 0) 
