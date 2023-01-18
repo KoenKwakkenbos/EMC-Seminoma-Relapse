@@ -50,7 +50,7 @@ class MILAttentionLayer(layers.Layer):
 
         # Input shape.
         # List of 2D tensors with shape: (batch_size, input_dim).
-        input_dim = input_shape[0][1]
+        input_dim = input_shape[1]
 
         self.v_weight_params = self.add_weight(
             shape=(input_dim, self.weight_params_dim),
@@ -84,12 +84,12 @@ class MILAttentionLayer(layers.Layer):
     def call(self, inputs):
 
         # Assigning variables from the number of inputs.
-        instances = [self.compute_attention_scores(instance) for instance in inputs]
+        instances = tf.reshape(self.compute_attention_scores(inputs), [-1])
 
         # Apply softmax over instances such that the output summation is equal to 1.
         alpha = tf.math.softmax(instances, axis=0)
 
-        return [alpha[i] for i in range(alpha.shape[0])]
+        return alpha
 
     def compute_attention_scores(self, instance):
 
@@ -108,3 +108,5 @@ class MILAttentionLayer(layers.Layer):
 
         # w^T*(tanh(v*h_k^T)) / w^T*(tanh(v*h_k^T)*sigmoid(u*h_k^T))
         return tf.tensordot(instance, self.w_weight_params, axes=1)
+
+        
