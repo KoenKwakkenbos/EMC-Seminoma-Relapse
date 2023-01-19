@@ -40,9 +40,15 @@ output = layers.Dense(2, activation="softmax")(reduction)
 
 model = keras.Model(inp, output)
 
+model.layers[3].trainable = False
+
 print(model.summary())
 
 model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'], run_eagerly=True)
-model.fit(datagen, verbose=1, epochs=10)
+
+strategy = tf.distribute.MirroredStrategy()
+
+with strategy.scope():  
+    model.fit(datagen, verbose=1, epochs=10)
 
 print("Fitting complete")
