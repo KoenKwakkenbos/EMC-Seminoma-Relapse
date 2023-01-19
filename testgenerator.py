@@ -1,6 +1,6 @@
 from datagenerator import MILdatagen
 
-from keras.applications.resnet import ResNet50, preprocess_input
+from tensorflow.keras.applications.resnet import ResNet50, preprocess_input
 
 import sys
 
