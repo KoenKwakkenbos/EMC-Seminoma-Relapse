@@ -3,7 +3,6 @@ import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
 from tqdm import tqdm
-from matplotlib import pyplot as plt
 
 
 # Source: https://keras.io/examples/vision/attention_mil_classification/
