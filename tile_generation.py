@@ -127,11 +127,11 @@ def main():
     base_dir = parsed_args.input
 
     image_annotation_paths = []
-    for dirpath, dirnames, filenames in os.walk(os.path.abspath(os.path.join(base_dir, 'WSI'))):
+    for dirpath, dirnames, filenames in os.walk(os.path.abspath(os.path.join(base_dir, 'Converted and anonymized'))):
         for filename in filenames:
             if filename.endswith('.mrxs'):
                 image_path = os.path.join(dirpath, filename)
-                annotation_path = os.path.abspath(os.path.join(base_dir, 'Annotations', os.path.relpath(dirpath, os.path.abspath(os.path.join(base_dir, 'WSI'))), filename.replace('.mrxs', '.geojson')))
+                annotation_path = os.path.abspath(os.path.join(base_dir, 'Annotations', os.path.relpath(dirpath, os.path.abspath(os.path.join(base_dir, 'Converted and anonymized'))), filename.replace('.mrxs', '.geojson')))
                 if os.path.exists(annotation_path):
                     image_annotation_paths.append((image_path, annotation_path))
 
