@@ -3,10 +3,10 @@
 #SBATCH --mem=14G            ### How much RAM memory do you need?
 #SBATCH -p express           ### The queue to submit to: express, short, long, interactive
 #SBATCH --gres=gpu:1         ### How many GPUs do you need?
-#SBATCH -t 0-01:00:00        ### The time limit in D-hh:mm:ss format
-#SBATCH -o /trinity/home/kkwakkenbos/repositories/EMC-Seminoma-Relapse/out_%j.log        ### Where to store the console output (%j is the job number)
-#SBATCH -e /trinity/home/kkwakkenbos/repositories/EMC-Seminoma-Relapse/error_%j.log      ### Where to store the error output
-#SBATCH --job-name=datagen_test  ### Name your job so you can distinguish between jobs
+#SBATCH -t 0-08:00:00        ### The time limit in D-hh:mm:ss format
+#SBATCH -o /trinity/home/kkwakkenbos/repositories/EMC-Seminoma-Relapse/output/out_%j.log        ### Where to store the console output (%j is the job number)
+#SBATCH -e /trinity/home/kkwakkenbos/repositories/EMC-Seminoma-Relapse/output/error_%j.log      ### Where to store the error output
+#SBATCH --job-name=autoencoder  ### Name your job so you can distinguish between jobs
 
 # Load the modules
 
@@ -23,4 +23,4 @@ module load TensorFlow/2.2.0-fosscuda-2019b-Python-3.7.4
 source /trinity/home/kkwakkenbos/venv_example_project/bin/activate 
 echo "Hello world"
 
-python testgenerator.py
+python train_autoencoder.py
