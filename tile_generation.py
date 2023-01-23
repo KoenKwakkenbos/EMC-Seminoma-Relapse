@@ -8,9 +8,10 @@ import cv2
 from shapely.geometry import shape, box
 import matplotlib.pyplot as plt
 from tqdm import tqdm
+import glob
 
 # add openslide
-OPENSLIDE_PATH = r'./openslide-win64/bin'
+OPENSLIDE_PATH = r'c://users/koenk/documents/EMC-Seminoma-Relapse/openslide-win64/bin'
 if hasattr(os, 'add_dll_directory'):
     # Python >= 3.8 on Windows
     with os.add_dll_directory(OPENSLIDE_PATH):
@@ -22,11 +23,12 @@ else:
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Process commandline arguments.")
 
-    parser.add_argument('-i', '--input', type=dir_path, help="Path to whole slide images and annotations.",
+    parser.add_argument('-i', '--input', type=dir_path,
+                        help="Path to whole slide images and annotations.",
                         required=True)
     parser.add_argument('-o', '--output', type=tar_path, nargs="?", const=1,
-                        required=True,
-                        help="Path to output folder.")    
+                        help="Path to output folder.",
+                        required=True)
     parser.add_argument('-s', '--tilesize', type=int, nargs="?", const=1,
                         default=224,
                         help="Size (px) of the square tiles to be extracted.")
@@ -53,8 +55,8 @@ def tar_path(path):
 
 def tile_slide(annotation_path, tile_size, downsample):
     # load annotation(s)
-    with open(annotation_path, 'r', encoding="utf8") as f:
-        annotation = json.load(f)
+    with open(annotation_path, 'r', encoding="utf8") as file:
+        annotation = json.load(file)
 
     annotation_polys = [shape(f["geometry"]) for f in annotation["features"]]
 
@@ -78,7 +80,7 @@ def tile_slide(annotation_path, tile_size, downsample):
                             np.ceil(width / tile_size[0]) * tile_size[0] - width
     new_height, height_diff = np.ceil(height / tile_size[1]) * tile_size[1], \
                               np.ceil(height / tile_size[1]) * tile_size[1] - height
-    
+
     # shift box so that it is centered around all annotations
     bbox_scaled = (
         bbox[0] - width_diff // 2,
@@ -90,63 +92,75 @@ def tile_slide(annotation_path, tile_size, downsample):
     # get x and y gridpoints the tiles should be generated on
     x_range = np.arange(bbox_scaled[0], bbox_scaled[2], tile_size[0] * downsample)
     y_range = np.arange(bbox_scaled[1], bbox_scaled[3], tile_size[1] * downsample)
-    
+
     # check the overlapping between the tile and the annotation polygons, discard tiles that
     # do not intersect with the annotations
     tile_coordinates = [(int(x), int(y)) for x, y in product(x_range, y_range)
-                        if any(poly.intersects(box(x, y, x + tile_size[0] * downsample, y + tile_size[1] * downsample))
+                        if any(poly.contains(box(x, y, x + tile_size[0] * downsample, y + tile_size[1] * downsample))
                         for poly in annotation_polys)]
     count = len(tile_coordinates)
 
     return tile_coordinates, count
 
 
-def process_and_save_tile(slide, coord):
+def process_and_save_tile(slide, coord, tile_size, output_path):
     offset_x = int(slide.properties['openslide.bounds-x'])
     offset_y = int(slide.properties['openslide.bounds-y'])
-    tile = slide.read_region((offset_x + coord[0],offset_y + coord[1]), 2, (224, 224))
+    tile = slide.read_region((offset_x + coord[0],offset_y + coord[1]), 2, (tile_size, tile_size))
     tile = np.asarray(tile)
-    
+
     gray_tile = cv2.cvtColor(tile, cv2.COLOR_BGRA2GRAY)
 
-    if 245 > np.mean(gray_tile) > 170:
-        # Otsu thresholding
-        _, threshold_tile = cv2.threshold(gray_tile, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    _, threshold_tile = cv2.threshold(gray_tile, 240, 255, cv2.THRESH_BINARY_INV)
 
-        tissue_pixels = np.count_nonzero(threshold_tile)
-        tissue_percentage = tissue_pixels / (threshold_tile.shape[0] * threshold_tile.shape[1]) * 100
+    tissue_pixels = np.count_nonzero(threshold_tile)
+    tissue_percentage = tissue_pixels / (threshold_tile.shape[0] * threshold_tile.shape[1]) * 100
 
-        if tissue_percentage > 45:
-            cv2.imwrite(f"./output2/{coord[0]}_{coord[1]}.png", cv2.cvtColor(tile, cv2.COLOR_RGBA2BGRA))
-    elif np.mean(gray_tile) > 245:
-        # tile is probabily entirely background
-        pass
-    else:
-        cv2.imwrite(f"./output2/{coord[0]}_{coord[1]}.png", cv2.cvtColor(tile, cv2.COLOR_RGBA2BGRA))
+    if tissue_percentage > 80:
+        cv2.imwrite(os.path.join(output_path, f"{coord[0]}_{coord[1]}.png"), cv2.cvtColor(tile, cv2.COLOR_RGBA2BGRA))
 
 
 def main():
     # Get input from commandline
     parsed_args = parse_arguments()
 
-    slide_path = parsed_args.input + 'TZ_08_G_HE_1.mrxs'
-    annotation_path = parsed_args.input + 'TZ_08_G_HE_1.geojson'
+    base_dir = parsed_args.input
+
+    image_annotation_paths = []
+    for dirpath, dirnames, filenames in os.walk(os.path.abspath(os.path.join(base_dir, 'WSI'))):
+        for filename in filenames:
+            if filename.endswith('.mrxs'):
+                image_path = os.path.join(dirpath, filename)
+                annotation_path = os.path.abspath(os.path.join(base_dir, 'Annotations', os.path.relpath(dirpath, os.path.abspath(os.path.join(base_dir, 'WSI'))), filename.replace('.mrxs', '.geojson')))
+                if os.path.exists(annotation_path):
+                    image_annotation_paths.append((image_path, annotation_path))
+
     tile_size = (parsed_args.tilesize, parsed_args.tilesize)
 
-    slide = openslide.open_slide(slide_path)
+    for slide_path, annotation_path in image_annotation_paths:
+        output_path = os.path.join(parsed_args.output, os.path.basename(slide_path).replace('.mrxs', ''))
+        print(output_path)
 
-    objective_power = slide.properties['openslide.objective-power']
-    downsample = int(int(objective_power) / parsed_args.magnification)
+        slide = openslide.open_slide(slide_path)
 
-    tiles_coords, num_tiles = tile_slide(annotation_path, tile_size, downsample)
+        objective_power = slide.properties['openslide.objective-power']
+        downsample = int(int(objective_power) / parsed_args.magnification)
 
-    print(f'Processing slide {slide_path}: generating {num_tiles} tiles.')
+        tiles_coords, num_tiles = tile_slide(annotation_path, tile_size, downsample)
 
-    # Uncomment this code to use multiple threads to process WSI
-    with ThreadPoolExecutor() as executor:
-        list(tqdm(executor.map(lambda coord: process_and_save_tile(slide, coord), tiles_coords)))
+        # FOR TESTING PURPOSES:
+        # tiles_coords = tiles_coords[:25]
 
-    print('----' * 8)
+        print(f'Processing slide {slide_path}: generating {num_tiles} tiles.')
+
+        # Uncomment this code to use multiple threads to process WSI
+
+        tar_path(output_path)
+
+        with ThreadPoolExecutor() as executor:
+            list(tqdm(executor.map(lambda coord: process_and_save_tile(slide, coord, tile_size[0], output_path), tiles_coords)))
+
+        print('----' * 8)
 
 
 if __name__ == "__main__":
