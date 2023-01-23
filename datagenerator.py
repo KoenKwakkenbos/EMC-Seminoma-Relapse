@@ -9,20 +9,27 @@ from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 class MILdatagen(tf.keras.utils.Sequence):
-    def __init__(self, csv_path, tile_size, *, train=False, shuffle=False):
-        self._csv_slides = pd.read_csv(csv_path, header=0)
+    def __init__(self, slide_list, tile_size, batch_size =32, train=False):
+        self.slide_list = slide_list
         self.tile_size = tile_size
+        self.batch_size = batch_size
         self.train = train
-        self.shuffle = shuffle
+        self.tile_list = []
+
+        for folder in self.slide_list:
+            for file in os.listdir(folder):
+                self.tile_list.append(os.path.join(folder, file))
+
+        self.on_epoch_end()
 
     def __len__(self):
-        return len(self._csv_slides['slide'])
+        return int(np.floor(len(self.tile_list) / self.batch_size))
 
-    def _process_image(self, slide_path, tile):
-        image = cv2.imread(os.path.join(slide_path, tile))
-        # image_norm = self._normalize_image(image)
-
-        image_norm = image
+    def _process_image(self, tile):
+        image = cv2.imread(tile)
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        image_norm = self._normalize_image(image)
+        #image_norm = image / 255.
 
         if self.train:
             image_norm = self._augment_image(image_norm)
@@ -30,17 +37,17 @@ class MILdatagen(tf.keras.utils.Sequence):
         return image_norm
 
     def __getitem__(self, idx):
-        slide_path = self._csv_slides['slide'][idx]
-        y = tf.keras.utils.to_categorical([self._csv_slides['relapse'][idx]], num_classes=2)
-
-        tile_list = os.listdir(slide_path)
+        indexes = self.indexes[idx*self.batch_size:(idx+1)*self.batch_size]
 
         with ThreadPoolExecutor(max_workers=32) as executor:
-            X = list(tqdm(executor.map(lambda tile: self._process_image(slide_path, tile), tile_list)))
+            X = list(executor.map(lambda tile: self._process_image(tile), [self.tile_list[k] for k in indexes]))
 
+        #X = np.empty((self.batch_size, *self.tile_size))
+
+        #for i, file in enumerate([self.tile_list[k] for k in indexes]):
+        #    X[i,] = self._process_image(file)
         X = np.array(X)
-
-        return X, y
+        return X, X
 
     # Adapted from: https://github.com/schaugf/HEnorm_python
     def _normalize_image(self, img, Io=240, alpha=1, beta=0.15):
@@ -138,6 +145,6 @@ class MILdatagen(tf.keras.utils.Sequence):
         return img
 
     def on_epoch_end(self):
-        # shuffle the order of slides
-        if self.shuffle:
-            self._csv_slides.sample(frac=1).reset_index(drop=True)
+        self.indexes = np.arange(len(self.tile_list))
+        if self.train:
+            np.random.shuffle(self.indexes)
