@@ -16,9 +16,10 @@ class MILdatagen(tf.keras.utils.Sequence):
         self.train = train
         self.tile_list = []
 
-        for folder in self.slide_list:
-            for file in os.listdir(folder):
-                self.tile_list.append(os.path.join(folder, file))
+        for patient in self.slide_list:
+            for root, subdirs, files in os.walk('./' + str(patient)):
+                for file in files:
+                    self.tile_list.append(os.path.join(root, file))
 
         self.on_epoch_end()
 
@@ -132,7 +133,7 @@ class MILdatagen(tf.keras.utils.Sequence):
 
         return Inorm
 
-    def _agument_image(self, img):
+    def _augment_image(self, img):
         
         if random.random() < 0.75:
             rot = random.choice([cv2.ROTATE_90_CLOCKWISE, cv2.ROTATE_180, cv2.ROTATE_90_COUNTERCLOCKWISE])
