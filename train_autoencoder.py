@@ -1,9 +1,11 @@
 import numpy as np
+import pandas as pd
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
 
 from datagenerator import MILdatagen
+from sklearn.model_selection import train_test_split
 
 
 def create_model(input_shape):
@@ -106,8 +108,32 @@ def train(model, train_gen, val_gen):
 
 if __name__ == "__main__":
     model = create_model((224, 224, 3))
-    
-    train_gen = MILdatagen(['./output6/TZ_08_G_HE_1'], 224, batch_size =32, train=False)
-    val_gen = MILdatagen(['./output6/TZ_10_D_HE_1'], 224, batch_size =32, train=False)
 
-    train(model, train_gen, val_gen)
+    patient_data = pd.read_csv('./Seminoma_Outcomes_AnonSelection_20230124.csv', header=0)
+    print(patient_data.head())
+
+    
+    pat_train, pat_val, y_train, y_val = train_test_split(
+        patient_data['AnonPID'], patient_data['Meta'], test_size=0.25, random_state=42,
+        stratify=patient_data['Meta']
+    )
+
+    print(list(pat_train))
+
+
+    train_gen = MILdatagen(list(pat_train), 224, batch_size=32, train=True)
+    val_gen = MILdatagen(list(pat_val), 224, batch_size=32, train=False)
+
+    model = train(model, train_gen, val_gen)
+
+    encoder = keras.Model(model.input, model.layers[17].output)
+
+
+    train_gen = MILdatagen(list(pat_train), 224, batch_size=32, train=False)
+    val_gen = MILdatagen(list(pat_val), 224, batch_size=32, train=False)
+
+    X_train_embedded = encoder.predict(train_gen)
+    X_val_embedded = encoder.predict(val_gen)
+
+    np.save('./output/X_train_embedded.npy', X_train_embedded)
+    np.save('./output/X_val_embedded.npy', X_val_embedded)
