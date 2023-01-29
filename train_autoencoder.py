@@ -65,7 +65,7 @@ def create_model(input_shape):
 
 
 def train(model, train_gen, val_gen):
-    file_path = "./tmp/best_model_weights.h5"
+    file_path = "./output/best_model_weights.h5"
 
     # Initialize model checkpoint callback.
     model_checkpoint = keras.callbacks.ModelCheckpoint(
@@ -84,6 +84,9 @@ def train(model, train_gen, val_gen):
         monitor="val_loss", patience=10, mode="min"
     )
     
+    reduce_lr = keras.callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.1,
+						  patience=5, min_lr=0.000001)
+    
     def SSIMLoss(y_true, y_pred):
         return 0.5*(1 - tf.reduce_mean(tf.image.ssim(y_true, y_pred, 1.0))) + 0.5*keras.losses.mean_absolute_error(y_true, y_pred) + 0.5*keras.losses.mean_squared_error(y_true, y_pred)
 
@@ -96,7 +99,7 @@ def train(model, train_gen, val_gen):
         train_gen,
         validation_data=val_gen,
         epochs=200,
-        callbacks=[early_stopping, model_checkpoint],
+        callbacks=[early_stopping, model_checkpoint, reduce_lr],
         verbose=1,
     )
 

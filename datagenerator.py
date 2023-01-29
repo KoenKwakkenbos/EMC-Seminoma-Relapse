@@ -17,7 +17,7 @@ class MILdatagen(tf.keras.utils.Sequence):
         self.tile_list = []
 
         for patient in self.slide_list:
-            for root, subdirs, files in os.walk('./' + str(patient)):
+            for root, subdirs, files in os.walk('/data/scratch/kkwakkenbos/Tiles_downsampled/' + str(patient)):
                 for file in files:
                     self.tile_list.append(os.path.join(root, file))
 

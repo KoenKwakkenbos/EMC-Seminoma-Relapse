@@ -1,9 +1,9 @@
 #!/bin/bash
-#SBATCH --ntasks=1           ### How many CPU cores do you need?
-#SBATCH --mem=14G            ### How much RAM memory do you need?
-#SBATCH -p express           ### The queue to submit to: express, short, long, interactive
+#SBATCH --ntasks=10           ### How many CPU cores do you need?
+#SBATCH --mem=20G            ### How much RAM memory do you need?
+#SBATCH -p short           ### The queue to submit to: express, short, long, interactive
 #SBATCH --gres=gpu:1         ### How many GPUs do you need?
-#SBATCH -t 0-08:00:00        ### The time limit in D-hh:mm:ss format
+#SBATCH -t 0-48:00:00        ### The time limit in D-hh:mm:ss format
 #SBATCH -o /trinity/home/kkwakkenbos/repositories/EMC-Seminoma-Relapse/output/out_%j.log        ### Where to store the console output (%j is the job number)
 #SBATCH -e /trinity/home/kkwakkenbos/repositories/EMC-Seminoma-Relapse/output/error_%j.log      ### Where to store the error output
 #SBATCH --job-name=autoencoder  ### Name your job so you can distinguish between jobs
