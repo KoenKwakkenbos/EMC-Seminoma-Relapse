@@ -130,5 +130,11 @@ dmypy.json
 
 TZ_08_G_HE_1/
 TZ_10_D_HE_1/
+tmp/
+output*
 *.mrxs
 *.geojson
+*.png 
+*.npy
+*.tif
+*.h5
