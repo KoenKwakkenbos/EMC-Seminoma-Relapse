@@ -31,14 +31,24 @@ def create_model(input_shape):
     x = layers.BatchNormalization()(x)
     x = layers.Conv2D(64, (3, 3), padding='same', strides = (2,2), activation='relu')(x)
     x = layers.BatchNormalization()(x)
+    x = layers.Conv2D(128, (3, 3), padding='same', activation='relu')(x)
+    x = layers.BatchNormalization()(x)
+    x = layers.Conv2D(128, (3, 3), padding='same', strides = (2,2), activation='relu')(x)
+    x = layers.BatchNormalization(name='encoder_final_layer')(x)
 
-    encoder = layers.BatchNormalization()(x)
+    encoder = x
 
     # Decoder
+    x = layers.Conv2D(128, (3, 3), padding='same', activation='relu')(encoder)
+    x = layers.BatchNormalization()(x)
+    x = layers.Conv2D(128, (3, 3), padding='same', activation='relu')(x)
+    x = layers.BatchNormalization()(x)
+    x = layers.UpSampling2D((2, 2))(x)
     x = layers.Conv2D(64, (3, 3), padding='same', activation='relu')(x)
     x = layers.BatchNormalization()(x)
     x = layers.Conv2D(64, (3, 3), padding='same', activation='relu')(x)
-    x = layers.UpSampling2D((2, 2))(encoder)
+    x = layers.BatchNormalization()(x)
+    x = layers.UpSampling2D((2, 2))(x)
     x = layers.Conv2D(64, (3, 3), padding='same', activation='relu')(x)
     x = layers.BatchNormalization()(x)
     x = layers.Conv2D(64, (3, 3), padding='same', activation='relu')(x)
