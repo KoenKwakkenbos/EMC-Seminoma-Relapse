@@ -96,7 +96,7 @@ def tile_slide(annotation_path, tile_size, downsample):
     # check the overlapping between the tile and the annotation polygons, discard tiles that
     # do not intersect with the annotations
     tile_coordinates = [(int(x), int(y)) for x, y in product(x_range, y_range)
-                        if any(poly.contains(box(x, y, x + tile_size[0] * downsample, y + tile_size[1] * downsample))
+                        if any(poly.intersects(box(x, y, x + tile_size[0] * downsample, y + tile_size[1] * downsample))
                         for poly in annotation_polys)]
     count = len(tile_coordinates)
 
