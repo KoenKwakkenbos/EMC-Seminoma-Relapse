@@ -12,65 +12,38 @@ def create_model(input_shape):
     input_img = keras.Input(shape=input_shape)
 
     # Encoder
-    x = layers.BatchNormalization()(input_img)
-    x = layers.Conv2D(16, (3, 3), padding='same', activation='relu')(x)
-    x = layers.BatchNormalization()(x)
+    x = layers.Conv2D(16, (3, 3), padding='same', activation='relu')(input_img)
     x = layers.Conv2D(16, (3, 3), padding='same', strides = (2,2), activation='relu')(x)
-    x = layers.BatchNormalization()(x)
 
     x = layers.Conv2D(32, (3, 3), padding='same', activation='relu')(x)
-    x = layers.BatchNormalization()(x)
     x = layers.Conv2D(32, (3, 3), padding='same', strides = (2,2), activation='relu')(x)
-    x = layers.BatchNormalization()(x)
 
     x = layers.Conv2D(64, (3, 3), padding='same', activation='relu')(x)
-    x = layers.BatchNormalization()(x)
     x = layers.Conv2D(64, (3, 3), padding='same', strides = (2,2), activation='relu')(x)
-    x = layers.BatchNormalization()(x)
     x = layers.Conv2D(64, (3, 3), padding='same', activation='relu')(x)
-    x = layers.BatchNormalization()(x)
-    x = layers.Conv2D(64, (3, 3), padding='same', strides = (2,2), activation='relu')(x)
-    x = layers.BatchNormalization()(x)
-    x = layers.Conv2D(128, (3, 3), padding='same', activation='relu')(x)
-    x = layers.BatchNormalization()(x)
-    x = layers.Conv2D(128, (3, 3), padding='same', strides = (2,2), activation='relu')(x)
-    x = layers.BatchNormalization(name='encoder_final_layer')(x)
+    x = layers.Conv2D(64, (3, 3), padding='same', strides = (2,2), activation='relu', name='encoder_final_layer')(x)
 
     encoder = x
 
     # Decoder
-    x = layers.Conv2D(128, (3, 3), padding='same', activation='relu')(encoder)
-    x = layers.BatchNormalization()(x)
-    x = layers.Conv2D(128, (3, 3), padding='same', activation='relu')(x)
-    x = layers.BatchNormalization()(x)
+    x = layers.Conv2D(64, (3, 3), padding='same', activation='relu')(x)
+    x = layers.Conv2D(64, (3, 3), padding='same', activation='relu')(x)
     x = layers.UpSampling2D((2, 2))(x)
     x = layers.Conv2D(64, (3, 3), padding='same', activation='relu')(x)
-    x = layers.BatchNormalization()(x)
     x = layers.Conv2D(64, (3, 3), padding='same', activation='relu')(x)
-    x = layers.BatchNormalization()(x)
-    x = layers.UpSampling2D((2, 2))(x)
-    x = layers.Conv2D(64, (3, 3), padding='same', activation='relu')(x)
-    x = layers.BatchNormalization()(x)
-    x = layers.Conv2D(64, (3, 3), padding='same', activation='relu')(x)
-    x = layers.BatchNormalization()(x)
     x = layers.UpSampling2D((2, 2))(x)
 
     x = layers.Conv2D(32, (3, 3), padding='same', activation='relu')(x)
-    x = layers.BatchNormalization()(x)
     x = layers.Conv2D(32, (3, 3), padding='same', activation='relu')(x)
-    x = layers.BatchNormalization()(x)
     x = layers.UpSampling2D((2, 2))(x)
 
     x = layers.Conv2D(16, (3, 3), padding='same', activation='relu')(x)
-    x = layers.BatchNormalization()(x)
     x = layers.Conv2D(16, (3, 3), padding='same', activation='relu')(x)
-    x = layers.BatchNormalization()(x)
     x = layers.UpSampling2D((2, 2))(x)
 
     decoder = layers.Conv2D(3, (3, 3), padding='same', activation='sigmoid')(x)
 
     model = keras.Model(input_img, decoder)
-
     return model
 
 
@@ -102,7 +75,7 @@ def train(model, train_gen, val_gen):
 
     # Compile model.
     model.compile(
-        optimizer="adam", loss=[SSIMLoss]
+        optimizer="adam", loss='binary_crossentropy'
     )
 
     model.fit(
@@ -134,16 +107,16 @@ if __name__ == "__main__":
     print(list(pat_train))
 
 
-    train_gen = MILdatagen(list(pat_train), 224, batch_size=32, train=True)
-    val_gen = MILdatagen(list(pat_val), 224, batch_size=32, train=False)
+    train_gen = MILdatagen(list(pat_train), 224, batch_size=64, train=True)
+    val_gen = MILdatagen(list(pat_val), 224, batch_size=64, train=False)
 
     model = train(model, train_gen, val_gen)
 
     encoder = keras.Model(model.input, model.layers[17].output)
 
 
-    train_gen = MILdatagen(list(pat_train), 224, batch_size=32, train=False)
-    val_gen = MILdatagen(list(pat_val), 224, batch_size=32, train=False)
+    train_gen = MILdatagen(list(pat_train), 224, batch_size=64, train=False)
+    val_gen = MILdatagen(list(pat_val), 224, batch_size=64, train=False)
 
     X_train_embedded = encoder.predict(train_gen)
     X_val_embedded = encoder.predict(val_gen)
