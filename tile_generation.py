@@ -58,7 +58,10 @@ def tile_slide(annotation_path, tile_size, downsample):
     with open(annotation_path, 'r', encoding="utf8") as file:
         annotation = json.load(file)
 
-    annotation_polys = [poly for poly in list(shape(feat["geometry"]).geoms) for feat in annotation["features"]]
+    try:
+        annotation_polys = [poly for poly in list(shape(f["geometry"]).geoms) for f in annotation["features"]]
+    except:
+        annotation_polys = [shape(f["geometry"]) for f in annotation["features"]]
 
     # initialize bounding box around first annotation
     bbox = annotation_polys[0].bounds
