@@ -7,7 +7,7 @@ from tensorflow.keras import layers
 from datagenerator import MILdatagen
 from sklearn.model_selection import train_test_split
 
-
+"""
 def create_model(input_shape):
     input_img = keras.Input(shape=input_shape)
 
@@ -45,6 +45,57 @@ def create_model(input_shape):
 
     model = keras.Model(input_img, decoder)
     return model
+""""
+def create_model(input_shape):
+    input_img = layers.Input(shape=input_shape)  # adapt this if using `channels_first` image data format
+
+    encoder = layers.Conv2D(filters=16, kernel_size=(3,3),strides=1, padding='same')(input_img)#x^2*16
+    encoder = layers.LeakyReLU()(encoder)
+    encoder = layers.Conv2D(filters=32, kernel_size=(3,3),strides=1, padding='same')(encoder)#x^2*32
+    encoder = layers.LeakyReLU()(encoder)
+    encoder = layers.BatchNormalization()(encoder)
+    encoder = layers.Conv2D(filters=64, kernel_size=(3,3),strides=2, padding='same')(encoder)#(x/2)^2*64
+    encoder = layers.LeakyReLU()(encoder)
+    encoder = layers.BatchNormalization()(encoder)
+    encoder = layers.MaxPooling2D()(encoder)#(x/4)^2*64
+    encoder = layers.Conv2D(filters=128, kernel_size=(3,3),strides=2, padding='same')(encoder)#(x/8)^2*128
+    encoder = layers.LeakyReLU()(encoder)
+    encoder = layers.BatchNormalization()(encoder)
+    encoder = layers.MaxPooling2D()(encoder)#(x/16)^2*64
+    encoder = layers.Conv2D(filters=64, kernel_size=(3,3),strides=1, padding='same')(encoder)#(x/16)^2*64
+    encoder = layers.LeakyReLU()(encoder)
+    encoder = layers.BatchNormalization()(encoder)
+    encoder = layers.Conv2D(filters=32, kernel_size=(3,3),strides=1, padding='same')(encoder)#(x/16)^2*32
+    encoder = layers.LeakyReLU()(encoder)
+
+
+    bottleneck = layers.Conv2D(filters=16, kernel_size=(1,1),strides=1, padding='same')(encoder)#(x/16)^2*16
+    bottleneck = layers.LeakyReLU()(bottleneck)
+
+
+    decoder = layers.Conv2D(filters=32, kernel_size=(1,1),strides=1, padding='same')(bottleneck)#(x/16)^2*32
+    decoder = layers.LeakyReLU()(decoder)
+    decoder = layers.Conv2D(filters=64, kernel_size=(3,3),strides=1, padding='same')(decoder)#(x/16)^2*64
+    decoder = layers.LeakyReLU()(decoder)
+    decoder = layers.BatchNormalization()(decoder)
+    decoder = layers.UpSampling2D()(decoder)#(x/8)^2*64
+    decoder = layers.Conv2DTranspose(filters=128, kernel_size=(3,3),strides=2, padding='same')(decoder)#(x/4)^2*128
+    decoder = layers.LeakyReLU()(decoder)
+    decoder = layers.BatchNormalization()(decoder)
+    decoder = layers.UpSampling2D()(decoder)#(x/2)^2*128
+    decoder = layers.Conv2DTranspose(filters=64, kernel_size=(3,3),strides=2, padding='same')(decoder)#x^2*64
+    decoder = layers.LeakyReLU()(decoder)
+    decoder = layers.BatchNormalization()(decoder)
+    decoder = layers.Conv2D(filters=32, kernel_size=(3,3),strides=1, padding='same')(decoder)#x^2*32
+    decoder = layers.LeakyReLU()(decoder)
+    decoder = layers.BatchNormalization()(decoder)
+    decoder = layers.Conv2D(filters=16, kernel_size=(3,3),strides=1, padding='same')(decoder)#x^2*16
+    decoder = layers.LeakyReLU()(decoder)
+    decoder = layers.Conv2D(filters=3, kernel_size=(3,3),strides=1, padding='same')(decoder)#x^2*3
+    decoded = layers.LeakyReLU()(decoder)
+
+    model = keras.Model(input_img, decoded)
+    return model
 
 
 def train(model, train_gen, val_gen):
@@ -75,7 +126,7 @@ def train(model, train_gen, val_gen):
 
     # Compile model.
     model.compile(
-        optimizer="adam", loss='binary_crossentropy'
+        optimizer="adam", loss='mean_squared_error'
     )
 
     model.fit(
@@ -112,7 +163,7 @@ if __name__ == "__main__":
 
     model = train(model, train_gen, val_gen)
 
-    encoder = keras.Model(model.input, model.layers[17].output)
+    encoder = keras.Model(model.input, model.layers[21].output)
 
 
     train_gen = MILdatagen(list(pat_train), 224, batch_size=64, train=False)
