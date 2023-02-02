@@ -45,7 +45,7 @@ def create_model(input_shape):
 
     model = keras.Model(input_img, decoder)
     return model
-""""
+
 def create_model(input_shape):
     input_img = layers.Input(shape=input_shape)  # adapt this if using `channels_first` image data format
 
@@ -96,7 +96,72 @@ def create_model(input_shape):
 
     model = keras.Model(input_img, decoded)
     return model
+"""
 
+def create_model(input_shape = (200,200,1)):
+    input_size = input_shape
+    #################################
+    # Encoder
+    #################################
+    inputs = layers.Input(input_size, name = 'input')
+
+    conv1 = layers.Conv2D(64, (3, 3), activation = 'relu', padding = 'same', name ='conv1_1')(inputs)
+    conv1 = layers.Conv2D(64, (3, 3), activation = 'relu', padding = 'same', name ='conv1_2')(conv1)
+    pool1 = layers.MaxPooling2D(pool_size = (2,2), strides = (2,2), name = 'pool_1')(conv1)
+
+    conv2 = layers.Conv2D(128, (3, 3), activation = 'relu', padding = 'same', name ='conv2_1')(pool1)
+    conv2 = layers.Conv2D(128, (3, 3), activation = 'relu', padding = 'same', name ='conv2_2')(conv2)
+    pool2 = layers.MaxPooling2D(pool_size = (2,2), strides = (2,2), name = 'pool_2')(conv2)
+    
+    conv3 = layers.Conv2D(256, (3, 3), activation = 'relu', padding = 'same', name ='conv3_1')(pool2)
+    conv3 = layers.Conv2D(256, (3, 3), activation = 'relu', padding = 'same', name ='conv3_2')(conv3)
+    conv3 = layers.Conv2D(256, (3, 3), activation = 'relu', padding = 'same', name ='conv3_3')(conv3)
+    pool3 = layers.MaxPooling2D(pool_size = (2,2), strides = (2,2), name = 'pool_3')(conv3)
+    
+    conv4 = layers.Conv2D(512, (3, 3), activation = 'relu', padding = 'same', name ='conv4_1')(pool3)
+    conv4 = layers.Conv2D(512, (3, 3), activation = 'relu', padding = 'same', name ='conv4_2')(conv4)
+    conv4 = layers.Conv2D(512, (3, 3), activation = 'relu', padding = 'same', name ='conv4_3')(conv4)
+    pool4 = layers.MaxPooling2D(pool_size = (2,2), strides = (2,2), name = 'pool_4')(conv4)
+
+    conv5 = layers.Conv2D(512, (3, 3), activation = 'relu', padding = 'same', name ='conv5_1')(pool4)
+    conv5 = layers.Conv2D(512, (3, 3), activation = 'relu', padding = 'same', name ='conv5_2')(conv5)
+    conv5 = layers.Conv2D(512, (3, 3), activation = 'relu', padding = 'same', name ='conv5_3')(conv5)
+    pool5 = layers.MaxPooling2D(pool_size = (2,2), strides = (2,2), name = 'pool_5')(conv5)
+
+    #################################
+    # Decoder
+    #################################
+    #conv1 = Conv2DTranspose(512, (2, 2), strides = 2, name = 'conv1')(pool5)
+
+    upsp1 = layers.UpSampling2D(size = (2,2), name = 'upsp1')(pool5)
+    conv6 = layers.Conv2D(512, 3, activation = 'relu', padding = 'same', name = 'conv6_1')(upsp1)
+    conv6 = layers.Conv2D(512, 3, activation = 'relu', padding = 'same', name = 'conv6_2')(conv6)
+    conv6 = layers.Conv2D(512, 3, activation = 'relu', padding = 'same', name = 'conv6_3')(conv6)
+
+    upsp2 = layers.UpSampling2D(size = (2,2), name = 'upsp2')(conv6)
+    conv7 = layers.Conv2D(512, 3, activation = 'relu', padding = 'same', name = 'conv7_1')(upsp2)
+    conv7 = layers.Conv2D(512, 3, activation = 'relu', padding = 'same', name = 'conv7_2')(conv7)
+    conv7 = layers.Conv2D(512, 3, activation = 'relu', padding = 'same', name = 'conv7_3')(conv7)
+    #zero1 = layers.ZeroPadding2D(padding =  ((1, 0), (1, 0)), data_format = 'channels_last', name='zero1')(conv7)
+
+    upsp3 = layers.UpSampling2D(size = (2,2), name = 'upsp3')(conv7)
+    conv8 = layers.Conv2D(256, 3, activation = 'relu', padding = 'same', name = 'conv8_1')(upsp3)
+    conv8 = layers.Conv2D(256, 3, activation = 'relu', padding = 'same', name = 'conv8_2')(conv8)
+    conv8 = layers.Conv2D(256, 3, activation = 'relu', padding = 'same', name = 'conv8_3')(conv8)
+
+    upsp4 = layers.UpSampling2D(size = (2,2), name = 'upsp4')(conv8)
+    conv9 = layers.Conv2D(128, 3, activation = 'relu', padding = 'same', name = 'conv9_1')(upsp4)
+    conv9 = layers.Conv2D(128, 3, activation = 'relu', padding = 'same', name = 'conv9_2')(conv9)
+
+    upsp5 = layers.UpSampling2D(size = (2,2), name = 'upsp5')(conv9)
+    conv10 = layers.Conv2D(64, 3, activation = 'relu', padding = 'same', name = 'conv10_1')(upsp5)
+    conv10 = layers.Conv2D(64, 3, activation = 'relu', padding = 'same', name = 'conv10_2')(conv10)
+
+    conv11 = layers.Conv2D(3, 3, activation = 'relu', padding = 'same', name = 'conv11')(conv10)
+
+    model = keras.Model(inputs = inputs, outputs = conv11, name = 'vgg-16_encoder_decoder')
+
+    return model
 
 def train(model, train_gen, val_gen):
     file_path = "./output/best_model_weights.h5"
@@ -146,6 +211,8 @@ def train(model, train_gen, val_gen):
 if __name__ == "__main__":
     model = create_model((224, 224, 3))
 
+    print(model.summary())
+
     patient_data = pd.read_csv('./Seminoma_Outcomes_AnonSelection_20230124.csv', header=0)
     print(patient_data.head())
 
@@ -163,14 +230,14 @@ if __name__ == "__main__":
 
     model = train(model, train_gen, val_gen)
 
-    encoder = keras.Model(model.input, model.layers[21].output)
+    #encoder = keras.Model(model.input, model.layers[21].output)
 
 
-    train_gen = MILdatagen(list(pat_train), 224, batch_size=64, train=False)
-    val_gen = MILdatagen(list(pat_val), 224, batch_size=64, train=False)
+    #train_gen = MILdatagen(list(pat_train), 224, batch_size=64, train=False)
+    #val_gen = MILdatagen(list(pat_val), 224, batch_size=64, train=False)
 
-    X_train_embedded = encoder.predict(train_gen)
-    X_val_embedded = encoder.predict(val_gen)
+    #X_train_embedded = encoder.predict(train_gen)
+    #X_val_embedded = encoder.predict(val_gen)
 
-    np.save('./output/X_train_embedded.npy', X_train_embedded)
-    np.save('./output/X_val_embedded.npy', X_val_embedded)
+    #np.save('./output/X_train_embedded.npy', X_train_embedded)
+    #np.save('./output/X_val_embedded.npy', X_val_embedded)
