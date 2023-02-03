@@ -7,6 +7,9 @@ from tensorflow.keras import layers
 from datagenerator import MILdatagen
 from sklearn.model_selection import train_test_split
 
+tf.config.run_functions_eagerly(True)
+
+
 """
 def create_model(input_shape):
     input_img = keras.Input(shape=input_shape)
@@ -106,26 +109,39 @@ def create_model(input_shape = (200,200,1)):
     inputs = layers.Input(input_size, name = 'input')
 
     conv1 = layers.Conv2D(64, (3, 3), activation = 'relu', padding = 'same', name ='conv1_1')(inputs)
+    conv1 = layers.BatchNormalization()(conv1)
     conv1 = layers.Conv2D(64, (3, 3), activation = 'relu', padding = 'same', name ='conv1_2')(conv1)
+    conv1 = layers.BatchNormalization()(conv1)
     pool1 = layers.MaxPooling2D(pool_size = (2,2), strides = (2,2), name = 'pool_1')(conv1)
 
     conv2 = layers.Conv2D(128, (3, 3), activation = 'relu', padding = 'same', name ='conv2_1')(pool1)
+    conv2 = layers.BatchNormalization()(conv2)
     conv2 = layers.Conv2D(128, (3, 3), activation = 'relu', padding = 'same', name ='conv2_2')(conv2)
+    conv2 = layers.BatchNormalization()(conv2)
     pool2 = layers.MaxPooling2D(pool_size = (2,2), strides = (2,2), name = 'pool_2')(conv2)
     
     conv3 = layers.Conv2D(256, (3, 3), activation = 'relu', padding = 'same', name ='conv3_1')(pool2)
+    conv3 = layers.BatchNormalization()(conv3)
     conv3 = layers.Conv2D(256, (3, 3), activation = 'relu', padding = 'same', name ='conv3_2')(conv3)
+    conv3 = layers.BatchNormalization()(conv3)
     conv3 = layers.Conv2D(256, (3, 3), activation = 'relu', padding = 'same', name ='conv3_3')(conv3)
+    conv3 = layers.BatchNormalization()(conv3)
     pool3 = layers.MaxPooling2D(pool_size = (2,2), strides = (2,2), name = 'pool_3')(conv3)
     
     conv4 = layers.Conv2D(512, (3, 3), activation = 'relu', padding = 'same', name ='conv4_1')(pool3)
+    conv4 = layers.BatchNormalization()(conv4)
     conv4 = layers.Conv2D(512, (3, 3), activation = 'relu', padding = 'same', name ='conv4_2')(conv4)
+    conv4 = layers.BatchNormalization()(conv4)
     conv4 = layers.Conv2D(512, (3, 3), activation = 'relu', padding = 'same', name ='conv4_3')(conv4)
+    conv4 = layers.BatchNormalization()(conv4)
     pool4 = layers.MaxPooling2D(pool_size = (2,2), strides = (2,2), name = 'pool_4')(conv4)
 
     conv5 = layers.Conv2D(512, (3, 3), activation = 'relu', padding = 'same', name ='conv5_1')(pool4)
+    conv5 = layers.BatchNormalization()(conv5)
     conv5 = layers.Conv2D(512, (3, 3), activation = 'relu', padding = 'same', name ='conv5_2')(conv5)
+    conv5 = layers.BatchNormalization()(conv5)
     conv5 = layers.Conv2D(512, (3, 3), activation = 'relu', padding = 'same', name ='conv5_3')(conv5)
+    conv5 = layers.BatchNormalization()(conv5)
     pool5 = layers.MaxPooling2D(pool_size = (2,2), strides = (2,2), name = 'pool_5')(conv5)
 
     #################################
@@ -135,29 +151,42 @@ def create_model(input_shape = (200,200,1)):
 
     upsp1 = layers.UpSampling2D(size = (2,2), name = 'upsp1')(pool5)
     conv6 = layers.Conv2D(512, 3, activation = 'relu', padding = 'same', name = 'conv6_1')(upsp1)
+    conv6 = layers.BatchNormalization()(conv6)
     conv6 = layers.Conv2D(512, 3, activation = 'relu', padding = 'same', name = 'conv6_2')(conv6)
+    conv6 = layers.BatchNormalization()(conv6)
     conv6 = layers.Conv2D(512, 3, activation = 'relu', padding = 'same', name = 'conv6_3')(conv6)
+    conv6 = layers.BatchNormalization()(conv6)
 
     upsp2 = layers.UpSampling2D(size = (2,2), name = 'upsp2')(conv6)
     conv7 = layers.Conv2D(512, 3, activation = 'relu', padding = 'same', name = 'conv7_1')(upsp2)
+    conv7 = layers.BatchNormalization()(conv7)
     conv7 = layers.Conv2D(512, 3, activation = 'relu', padding = 'same', name = 'conv7_2')(conv7)
+    conv7 = layers.BatchNormalization()(conv7)
     conv7 = layers.Conv2D(512, 3, activation = 'relu', padding = 'same', name = 'conv7_3')(conv7)
+    conv7 = layers.BatchNormalization()(conv7)
     #zero1 = layers.ZeroPadding2D(padding =  ((1, 0), (1, 0)), data_format = 'channels_last', name='zero1')(conv7)
 
     upsp3 = layers.UpSampling2D(size = (2,2), name = 'upsp3')(conv7)
     conv8 = layers.Conv2D(256, 3, activation = 'relu', padding = 'same', name = 'conv8_1')(upsp3)
+    conv8 = layers.BatchNormalization()(conv8)
     conv8 = layers.Conv2D(256, 3, activation = 'relu', padding = 'same', name = 'conv8_2')(conv8)
+    conv8 = layers.BatchNormalization()(conv8)
     conv8 = layers.Conv2D(256, 3, activation = 'relu', padding = 'same', name = 'conv8_3')(conv8)
+    conv8 = layers.BatchNormalization()(conv8)
 
     upsp4 = layers.UpSampling2D(size = (2,2), name = 'upsp4')(conv8)
     conv9 = layers.Conv2D(128, 3, activation = 'relu', padding = 'same', name = 'conv9_1')(upsp4)
+    conv9 = layers.BatchNormalization()(conv9)
     conv9 = layers.Conv2D(128, 3, activation = 'relu', padding = 'same', name = 'conv9_2')(conv9)
+    conv9 = layers.BatchNormalization()(conv9)
 
     upsp5 = layers.UpSampling2D(size = (2,2), name = 'upsp5')(conv9)
     conv10 = layers.Conv2D(64, 3, activation = 'relu', padding = 'same', name = 'conv10_1')(upsp5)
+    conv10 = layers.BatchNormalization()(conv10)
     conv10 = layers.Conv2D(64, 3, activation = 'relu', padding = 'same', name = 'conv10_2')(conv10)
+    conv10 = layers.BatchNormalization()(conv10)
 
-    conv11 = layers.Conv2D(3, 3, activation = 'relu', padding = 'same', name = 'conv11')(conv10)
+    conv11 = layers.Conv2D(3, 3, activation = 'sigmoid', padding = 'same', name = 'conv11')(conv10)
 
     model = keras.Model(inputs = inputs, outputs = conv11, name = 'vgg-16_encoder_decoder')
 
@@ -191,7 +220,7 @@ def train(model, train_gen, val_gen):
 
     # Compile model.
     model.compile(
-        optimizer="adam", loss='mean_squared_error'
+        optimizer="adam", loss=[SSIMLoss], run_eagerly=True
     )
 
     model.fit(
