@@ -130,6 +130,7 @@ dmypy.json
 
 TZ_08_G_HE_1/
 TZ_10_D_HE_1/
+Tiles/
 tmp/
 output*
 *.mrxs
@@ -138,3 +139,6 @@ output*
 *.npy
 *.tif
 *.h5
+*.html
+*.ipynb
+*.jpg
