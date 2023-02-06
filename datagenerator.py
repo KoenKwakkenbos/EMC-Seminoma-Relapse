@@ -9,17 +9,20 @@ from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 class MILdatagen(tf.keras.utils.Sequence):
-    def __init__(self, slide_list, tile_size, batch_size =32, train=False):
+    def __init__(self, slide_list, outcome_list, tile_size, batch_size =32, train=False):
         self.slide_list = slide_list
+        self.pat_outcome_list = outcome_list
         self.tile_size = tile_size
         self.batch_size = batch_size
         self.train = train
         self.tile_list = []
+        self.tile_outcome_list = []
 
         for patient in self.slide_list:
             for root, subdirs, files in os.walk('/data/scratch/kkwakkenbos/Tiles_downsampled/' + str(patient)):
                 for file in files:
                     self.tile_list.append(os.path.join(root, file))
+                    self.tile_outcome_list.append(self.pat_outcome_list[patient])
 
         self.on_epoch_end()
 
@@ -48,7 +51,9 @@ class MILdatagen(tf.keras.utils.Sequence):
         #for i, file in enumerate([self.tile_list[k] for k in indexes]):
         #    X[i,] = self._process_image(file)
         X = np.array(X)
-        return X, X
+        y = np.array([self.tile_outcome_list[k] for k in indexes])
+
+        return X, y
 
     # Adapted from: https://github.com/schaugf/HEnorm_python
     def _normalize_image(self, img, Io=240, alpha=1, beta=0.15):
