@@ -217,7 +217,8 @@ def create_model(input_shape = (200,200,1)):
 
     return model
 
-def train(model, train_gen, val_gen):
+def train(train_gen, val_gen):
+
     file_path = "./output/best_model_weights.h5"
 
     # Initialize model checkpoint callback.
@@ -244,9 +245,14 @@ def train(model, train_gen, val_gen):
         return 0.5*(1 - tf.reduce_mean(tf.image.ssim(y_true, y_pred, 1.0))) + 0.5*keras.losses.mean_absolute_error(y_true, y_pred) + 0.5*keras.losses.mean_squared_error(y_true, y_pred)
 
     # Compile model.
-    model.compile(
-        optimizer="adam", loss=[SSIMLoss], run_eagerly=True
-    )
+    strategy = tf.distribute.MirroredStrategy()
+    print('Number of devices {}'.format(strategy.num_replicas_in_sync))
+
+    with strategy.scope():
+        model = create_model((224, 224, 3))
+        model.compile(
+            optimizer="adam", loss=[SSIMLoss], run_eagerly=True
+        )
 
     model.fit(
         train_gen,
@@ -263,10 +269,6 @@ def train(model, train_gen, val_gen):
 
 
 if __name__ == "__main__":
-    model = create_model((224, 224, 3))
-
-    print(model.summary())
-
     patient_data = pd.read_csv('./Seminoma_Outcomes_AnonSelection_20230124.csv', header=0)
     print(patient_data.head())
 
@@ -282,7 +284,7 @@ if __name__ == "__main__":
     train_gen = MILdatagen(list(pat_train), 224, batch_size=64, train=True)
     val_gen = MILdatagen(list(pat_val), 224, batch_size=64, train=False)
 
-    model = train(model, train_gen, val_gen)
+    model = train(train_gen, val_gen)
 
     #encoder = keras.Model(model.input, model.layers[21].output)
 
