@@ -207,8 +207,15 @@ def train_step(x, y):
 
     return loss_value
 
+@tf.function
+def test_step(x, y):
+    y = [y] * 5
+    y = tf.reshape(y, [5, 1])
+    val_logits = model(x, training=False)
+    val_acc_metric.update_state(y, val_logits)
 
-epochs = 2
+
+epochs = 20
 for epoch in range(epochs):
     
     print("\nStart of epoch %d" % (epoch,))
@@ -232,4 +239,17 @@ for epoch in range(epochs):
         % (step, float(loss_value))
     )
 
+    for x_batch_val, y_batch_val in tqdm(val_gen):
+        logits = model.predict(x_batch_val, 16, verbose=0)
+
+        top_k = tf.math.top_k(tf.reshape(logits, [-1]), k=5, sorted=True).indices
+        
+        x_batch_val_k = tf.gather(x_batch_val, top_k)
+
+        test_step(x_batch_val_k, y_batch_val)
+
+    val_acc = val_acc_metric.result()
+    print("Validation acc: %.4f" % (float(val_acc),))
+
     train_acc_metric.reset_states()
+    val_acc_metric.reset_states()
