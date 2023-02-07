@@ -40,7 +40,7 @@ class MILdatagen(tf.keras.utils.Sequence):
         return image_norm
 
     def __getitem__(self, idx):
-        for root, subdirs, files in os.walk('./data/scratch/kkwakkenbos/Tiles_downsampled_1024/' + str(self.slide_list[idx])):
+        for root, subdirs, files in os.walk('/data/scratch/kkwakkenbos/Tiles_downsampled_1024/' + str(self.slide_list[idx])):
             for file in files:
                 self.tile_list.append(os.path.join(root, file))
         
@@ -166,7 +166,7 @@ val_gen = MILdatagen(list(pat_val), y_val, 224, batch_size=16, train=False)
 
 inputs = keras.Input(shape=(224, 224, 3), name="digits")
 x1 = layers.Conv2D(64, 3, activation="relu")(inputs)
-x2 = layers.Conv1D(64, 3, activation="relu")(x1)
+x2 = layers.Conv2D(64, 3, activation="relu")(x1)
 x2 = layers.GlobalMaxPooling2D()(x2)
 outputs = layers.Dense(1, name="predictions")(x2)
 model = keras.Model(inputs=inputs, outputs=outputs)
@@ -181,14 +181,7 @@ val_acc_metric = keras.metrics.BinaryAccuracy()
 
 
 @tf.function
-def train_step(x, y):
-    
-    logits = model(x)
-
-    top_k = tf.math.top_k(tf.reshape(logits, [-1]), k=5, sorted=True).indices
-    
-    x_batch_train_k = tf.gather(x, top_k)
-    
+def train_step(x, y):    
     with tf.GradientTape() as tape:
 
         # Run the forward pass of the layer.
@@ -216,12 +209,20 @@ def train_step(x, y):
 
 epochs = 2
 for epoch in range(epochs):
+    
     print("\nStart of epoch %d" % (epoch,))
 
     # Iterate over the batches of the dataset.
     for step, (x_batch_train, y_batch_train) in enumerate(tqdm(train_gen)):
+
+        logits = model.predict(x_batch_train, 16)
+
+        top_k = tf.math.top_k(tf.reshape(logits, [-1]), k=5, sorted=True).indices
+        
+        x_batch_train_k = tf.gather(x_batch_train, top_k)
+
         #x_batch_train = x_batch_train[0:10,]
-        loss_value = train_step(x_batch_train, y_batch_train)
+        loss_value = train_step(x_batch_train_k, y_batch_train)
 
     train_acc = train_acc_metric.result()
     print("Training acc over epoch: %.4f" % (float(train_acc),))
