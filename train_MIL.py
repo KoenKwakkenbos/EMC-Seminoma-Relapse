@@ -205,7 +205,7 @@ def train_step(x, y):
         # Compute the loss value for this minibatch.
         y = [y] * 5
         y = tf.reshape(y, [5, 1])
-        loss_value = loss_fn(y, logits, sample_weight=[0.7, 1.9])
+        loss_value = loss_fn(y, logits)
     # Use the gradient tape to automatically retrieve
     # the gradients of the trainable variables with respect to the loss.
     grads = tape.gradient(loss_value, model.trainable_weights)
@@ -224,7 +224,7 @@ def test_step(x, y):
     val_logits = model(x, training=False)
     val_acc_metric.update_state(y, val_logits)
 
-    loss_value = loss_fn(y, val_logits, sample_weight=[0.7, 1.9])
+    loss_value = loss_fn(y, val_logits)
 
     return loss_value
 
