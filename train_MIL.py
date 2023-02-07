@@ -174,59 +174,61 @@ pat_train, pat_val, y_train, y_val = train_test_split(
 train_gen = MILdatagen(list(pat_train), y_train, 224, batch_size=16, train=True)
 val_gen = MILdatagen(list(pat_val), y_val, 224, batch_size=16, train=False)
 
+strategy = tf.distribute.MirroredStrategy()
+print('Number of devices {}'.format(strategy.num_replicas_in_sync))
 
-inputs = keras.Input(shape=(224, 224, 3), name="digits")
-x1 = ResNet50(include_top=False, weights='imagenet', pooling='max')(inputs)
-outputs = layers.Dense(1, name="predictions")(x1)
-model = keras.Model(inputs=inputs, outputs=outputs)
+with strategy.scope():
+    inputs = keras.Input(shape=(224, 224, 3), name="digits")
+    x1 = ResNet50(include_top=False, weights='imagenet', pooling='max')(inputs)
+    outputs = layers.Dense(1, name="predictions")(x1)
+    model = keras.Model(inputs=inputs, outputs=outputs)
 #model.layers[1].trainable = False
 
-print(model.summary())
+    print(model.summary())
 
-# Instantiate an optimizer.
-optimizer = keras.optimizers.Adam()
-# Instantiate a loss function.
-loss_fn = keras.losses.BinaryCrossentropy(from_logits=True)
+    # Instantiate an optimizer.
+    optimizer = keras.optimizers.Adam()
+    # Instantiate a loss function.
+    loss_fn = keras.losses.BinaryCrossentropy(from_logits=True)
 
-train_acc_metric = keras.metrics.BinaryAccuracy()
-val_acc_metric = keras.metrics.BinaryAccuracy()
+    train_acc_metric = keras.metrics.BinaryAccuracy()
+    val_acc_metric = keras.metrics.BinaryAccuracy()
 
 
-@tf.function
-def train_step(x, y):    
-    with tf.GradientTape() as tape:
+    @tf.function
+    def train_step(x, y):    
+        with tf.GradientTape() as tape:
 
-        # Run the forward pass of the layer.
-        # The operations that the layer applies
-        # to its inputs are going to be recorded
-        # on the GradientTape.
-        logits = model(x_batch_train_k, training=True)  # Logits for this minibatch
-        
-        # Compute the loss value for this minibatch.
+            # Run the forward pass of the layer.
+            # The operations that the layer applies
+            # to its inputs are going to be recorded
+            # on the GradientTape.
+            logits = model(x_batch_train_k, training=True)  # Logits for this minibatch
+            
+            # Compute the loss value for this minibatch.
+            y = [y] * 5
+            y = tf.reshape(y, [5, 1])
+            loss_value = loss_fn(y, logits)
+        # Use the gradient tape to automatically retrieve
+        # the gradients of the trainable variables with respect to the loss.
+        grads = tape.gradient(loss_value, model.trainable_weights)
+
+        # Run one step of gradient descent by updating
+        # the value of the variables to minimize the loss.
+        optimizer.apply_gradients(zip(grads, model.trainable_weights))
+        train_acc_metric.update_state(y, logits)
+
+        return loss_value
+
+    @tf.function
+    def test_step(x, y):
         y = [y] * 5
         y = tf.reshape(y, [5, 1])
-        loss_value = loss_fn(y, logits)
-    # Use the gradient tape to automatically retrieve
-    # the gradients of the trainable variables with respect to the loss.
-    grads = tape.gradient(loss_value, model.trainable_weights)
+        val_logits = model(x, training=False)
+        val_acc_metric.update_state(y, val_logits)
 
-    # Run one step of gradient descent by updating
-    # the value of the variables to minimize the loss.
-    optimizer.apply_gradients(zip(grads, model.trainable_weights))
-    train_acc_metric.update_state(y, logits)
+        loss_value = loss_fn(y, val_logits)
 
-    return loss_value
-
-@tf.function
-def test_step(x, y):
-    y = [y] * 5
-    y = tf.reshape(y, [5, 1])
-    val_logits = model(x, training=False)
-    val_acc_metric.update_state(y, val_logits)
-
-    loss_value = loss_fn(y, val_logits)
-
-    return loss_value
 
 epochs = 20
 for epoch in range(epochs):
