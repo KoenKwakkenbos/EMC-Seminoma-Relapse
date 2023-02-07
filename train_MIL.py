@@ -177,7 +177,7 @@ val_gen = MILdatagen(list(pat_val), y_val, 224, batch_size=16, train=False)
 inputs = keras.Input(shape=(224, 224, 3), name="digits")
 x1 = preprocess_input(inputs)
 x2 = ResNet50(include_top=False, weights='imagenet', pooling='max')(x1)
-outputs = layers.Dense(1, name="predictions")(x1)
+outputs = layers.Dense(1, name="predictions")(x2)
 model = keras.Model(inputs=inputs, outputs=outputs)
 #model.layers[1].trainable = False
 
