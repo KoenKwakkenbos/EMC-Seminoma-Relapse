@@ -60,7 +60,6 @@ class MILdatagen(tf.keras.utils.Sequence):
             X = list(executor.map(self._process_image, tile_list))
 
         X = np.array(X)
-        X = preprocess_input(X)
 
         return X, y
 
@@ -143,7 +142,8 @@ class MILdatagen(tf.keras.utils.Sequence):
         Inorm[Inorm>255] = 254
         Inorm = np.reshape(Inorm.T, (h, w, 3)).astype(np.uint8)
 
-        Inorm = cv2.normalize(Inorm, None, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_32F)
+        #Inorm = cv2.normalize(Inorm, None, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_32F)
+        Inorm = preprocess_input(Inorm)
 
         return Inorm
 
