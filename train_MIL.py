@@ -224,11 +224,15 @@ def test_step(x, y):
     val_logits = model(x, training=False)
     val_acc_metric.update_state(y, val_logits)
 
+    loss_value = loss_fn(y, val_logits)
+
+    return loss_value
+
 epochs = 20
 for epoch in range(epochs):
     
     avg_loss = 0
-
+    avg_loss_val = 0
 
     print("\nStart of epoch %d" % (epoch,))
 
@@ -244,7 +248,8 @@ for epoch in range(epochs):
         #x_batch_train = x_batch_train[0:10,]
         loss_value = train_step(x_batch_train_k, y_batch_train)
         avg_loss += loss_value
-        avg_loss /= (step+1)
+    
+    avg_loss /= (step+1)
     
     train_acc = train_acc_metric.result()
     print("Training acc over epoch: %.4f" % (float(train_acc),))
@@ -253,16 +258,19 @@ for epoch in range(epochs):
         % (step, float(avg_loss))
     )
 
-    for x_batch_val, y_batch_val in tqdm(val_gen):
+    for step, (x_batch_val, y_batch_val) in enumerate(tqdm(val_gen)):
         logits = model.predict(x_batch_val, 16, verbose=0)
 
         top_k = tf.math.top_k(tf.reshape(logits, [-1]), k=5, sorted=True).indices
         
         x_batch_val_k = tf.gather(x_batch_val, top_k)
 
-        test_step(x_batch_val_k, y_batch_val)
+        loss_value = test_step(x_batch_val_k, y_batch_val)
+        avg_loss_val += loss_value
+    avg_loss_val /= (step+1)
 
     val_acc = val_acc_metric.result()
+    print("Validation loss: %.4f" % (float(avg_loss_val),))
     print("Validation acc: %.4f" % (float(val_acc),))
 
     train_acc_metric.reset_states()
