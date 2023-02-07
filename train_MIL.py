@@ -4,6 +4,7 @@ import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
 from tensorflow.keras.applications import ResNet50
+from tensorflow.keras.applications.resnet50 import preprocess_input
 from sklearn.model_selection import train_test_split
 import os
 import random
@@ -166,11 +167,13 @@ val_gen = MILdatagen(list(pat_val), y_val, 224, batch_size=16, train=False)
 
 
 inputs = keras.Input(shape=(224, 224, 3), name="digits")
-x1 = layers.Conv2D(64, 3, activation="relu")(inputs)
-x2 = layers.Conv2D(64, 3, activation="relu")(x1)
-x2 = layers.GlobalMaxPooling2D()(x2)
-outputs = layers.Dense(1, name="predictions")(x2)
+input = preprocess_input(inputs)
+x1 = ResNet50(include_top=False, weights='imagenet', pooling='max')(inputs)
+outputs = layers.Dense(1, name="predictions")(x1)
 model = keras.Model(inputs=inputs, outputs=outputs)
+model.layers[1].trainable = False
+
+print(model.summary())
 
 # Instantiate an optimizer.
 optimizer = keras.optimizers.SGD(learning_rate=1e-3)
@@ -214,6 +217,9 @@ def test_step(x, y):
     val_logits = model(x, training=False)
     val_acc_metric.update_state(y, val_logits)
 
+    val_loss = loss_fn(y, logits)
+    return val_loss
+
 
 epochs = 20
 for epoch in range(epochs):
@@ -246,7 +252,7 @@ for epoch in range(epochs):
         
         x_batch_val_k = tf.gather(x_batch_val, top_k)
 
-        test_step(x_batch_val_k, y_batch_val)
+        _ = test_step(x_batch_val_k, y_batch_val)
 
     val_acc = val_acc_metric.result()
     print("Validation acc: %.4f" % (float(val_acc),))
