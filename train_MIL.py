@@ -171,12 +171,12 @@ input = preprocess_input(inputs)
 x1 = ResNet50(include_top=False, weights='imagenet', pooling='max')(inputs)
 outputs = layers.Dense(1, name="predictions")(x1)
 model = keras.Model(inputs=inputs, outputs=outputs)
-model.layers[1].trainable = False
+#model.layers[1].trainable = False
 
 print(model.summary())
 
 # Instantiate an optimizer.
-optimizer = keras.optimizers.SGD(learning_rate=1e-3)
+optimizer = keras.optimizers.Adam()
 # Instantiate a loss function.
 loss_fn = keras.losses.BinaryCrossentropy(from_logits=True)
 
@@ -198,7 +198,7 @@ def train_step(x, y):
         y = [y] * 5
         y = tf.reshape(y, [5, 1])
         loss_value = loss_fn(y, logits)
-
+        print(loss_value)
     # Use the gradient tape to automatically retrieve
     # the gradients of the trainable variables with respect to the loss.
     grads = tape.gradient(loss_value, model.trainable_weights)
