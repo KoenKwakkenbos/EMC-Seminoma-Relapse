@@ -6,7 +6,7 @@
 #SBATCH -t 0-48:00:00        ### The time limit in D-hh:mm:ss format
 #SBATCH -o /trinity/home/kkwakkenbos/repositories/EMC-Seminoma-Relapse/output_MIL/out_%j.log        ### Where to store the console output (%j is the job number)
 #SBATCH -e /trinity/home/kkwakkenbos/repositories/EMC-Seminoma-Relapse/output_MIL/error_%j.log      ### Where to store the error output
-#SBATCH --job-name=autoencoder  ### Name your job so you can distinguish between jobs
+#SBATCH --job-name=MIL_resnet  ### Name your job so you can distinguish between jobs
 
 # Load the modules
 
