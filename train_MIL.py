@@ -217,10 +217,6 @@ def test_step(x, y):
     val_logits = model(x, training=False)
     val_acc_metric.update_state(y, val_logits)
 
-    val_loss = loss_fn(y, logits)
-    return val_loss
-
-
 epochs = 20
 for epoch in range(epochs):
     
@@ -252,7 +248,7 @@ for epoch in range(epochs):
         
         x_batch_val_k = tf.gather(x_batch_val, top_k)
 
-        _ = test_step(x_batch_val_k, y_batch_val)
+        test_step(x_batch_val_k, y_batch_val)
 
     val_acc = val_acc_metric.result()
     print("Validation acc: %.4f" % (float(val_acc),))
