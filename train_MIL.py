@@ -40,14 +40,15 @@ class MILdatagen(tf.keras.utils.Sequence):
         return image_norm
 
     def __getitem__(self, idx):
+        tile_list = []
         for root, subdirs, files in os.walk('/data/scratch/kkwakkenbos/Tiles_downsampled_1024/' + str(self.slide_list[idx])):
             for file in files:
-                self.tile_list.append(os.path.join(root, file))
+                tile_list.append(os.path.join(root, file))
         
         y = np.array(self.pat_outcome_list[self.slide_list[idx]])
 
         with ThreadPoolExecutor(max_workers=32) as executor:
-            X = list(executor.map(self._process_image, self.tile_list))
+            X = list(executor.map(self._process_image, tile_list))
 
         X = np.array(X)
 
@@ -215,7 +216,7 @@ for epoch in range(epochs):
     # Iterate over the batches of the dataset.
     for step, (x_batch_train, y_batch_train) in enumerate(tqdm(train_gen)):
 
-        logits = model.predict(x_batch_train, 16)
+        logits = model.predict(x_batch_train, 16, verbose=0)
 
         top_k = tf.math.top_k(tf.reshape(logits, [-1]), k=5, sorted=True).indices
         
