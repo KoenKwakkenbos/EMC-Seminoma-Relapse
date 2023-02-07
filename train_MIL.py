@@ -31,9 +31,9 @@ class MILdatagen(tf.keras.utils.Sequence):
 
     def _process_image(self, tile):
         image = cv2.imread(os.path.join(tile))
-        #image_norm = self._normalize_image(image)
+        image_norm = self._normalize_image(image)
 
-        image_norm = image
+        #image_norm = image
 
         if self.train:
             image_norm = self._augment_image(image_norm)
