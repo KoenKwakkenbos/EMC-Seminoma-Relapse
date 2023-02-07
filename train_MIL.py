@@ -17,14 +17,21 @@ from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor
 
 class MILdatagen(tf.keras.utils.Sequence):
-    def __init__(self, slide_list, outcome_list, tile_size, batch_size =1, train=False):
-        self.slide_list = slide_list
+    def __init__(self, pat_list, outcome_list, tile_size, batch_size =1, train=False):
+        self.pat_list = pat_list
+        self.slide_list = []
         self.pat_outcome_list = outcome_list
         self.tile_size = tile_size
         self.batch_size = batch_size
         self.train = train
         self.tile_list = []
         self.tile_outcome_list = []
+
+        for pat in self.pat_list:
+            for root, subdirs, files in os.walk('/data/scratch/kkwakkenbos/Tiles_downsampled_1024/' + str(pat)):
+                for dir in subdirs:
+                    self.slide_list.append((pat, dir))
+
 
     def __len__(self):
         return len(self.slide_list)
@@ -42,11 +49,12 @@ class MILdatagen(tf.keras.utils.Sequence):
 
     def __getitem__(self, idx):
         tile_list = []
-        for root, subdirs, files in os.walk('/data/scratch/kkwakkenbos/Tiles_downsampled_1024/' + str(self.slide_list[idx])):
+        for root, subdirs, files in os.walk('/data/scratch/kkwakkenbos/Tiles_downsampled_1024/' + str(self.slide_list[idx][0]) + '/' + str(self.slide_list[idx][1])):
             for file in files:
                 tile_list.append(os.path.join(root, file))
+
         
-        y = np.array(self.pat_outcome_list[self.slide_list[idx]])
+        y = np.array(self.pat_outcome_list[self.slide_list[idx][0]])
 
         with ThreadPoolExecutor(max_workers=32) as executor:
             X = list(executor.map(self._process_image, tile_list))
@@ -198,7 +206,6 @@ def train_step(x, y):
         y = [y] * 5
         y = tf.reshape(y, [5, 1])
         loss_value = loss_fn(y, logits)
-        print(loss_value)
     # Use the gradient tape to automatically retrieve
     # the gradients of the trainable variables with respect to the loss.
     grads = tape.gradient(loss_value, model.trainable_weights)
@@ -220,6 +227,9 @@ def test_step(x, y):
 epochs = 20
 for epoch in range(epochs):
     
+    avg_loss = 0
+
+
     print("\nStart of epoch %d" % (epoch,))
 
     # Iterate over the batches of the dataset.
@@ -233,12 +243,14 @@ for epoch in range(epochs):
 
         #x_batch_train = x_batch_train[0:10,]
         loss_value = train_step(x_batch_train_k, y_batch_train)
-
+        avg_loss += loss_value
+        avg_loss /= (step+1)
+    
     train_acc = train_acc_metric.result()
     print("Training acc over epoch: %.4f" % (float(train_acc),))
     print(
         "Training loss (for one batch) at step %d: %.4f"
-        % (step, float(loss_value))
+        % (step, float(avg_loss))
     )
 
     for x_batch_val, y_batch_val in tqdm(val_gen):
