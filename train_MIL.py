@@ -184,7 +184,7 @@ model = keras.Model(inputs=inputs, outputs=outputs)
 print(model.summary())
 
 # Instantiate an optimizer.
-optimizer = keras.optimizers.Adam()
+optimizer = keras.optimizers.Adam(lr=0.01)
 # Instantiate a loss function.
 loss_fn = keras.losses.BinaryCrossentropy(from_logits=True)
 
@@ -228,9 +228,11 @@ def test_step(x, y):
 
     return loss_value
 
-epochs = 20
+epochs = 200
 for epoch in range(epochs):
-    
+    best_val_loss = np.Inf
+    if epoch % 67 == 0:
+        optimizer = keras.optimizers.Adam(lr=0.001)    
     avg_loss = 0
     avg_loss_val = 0
 
@@ -268,6 +270,8 @@ for epoch in range(epochs):
         loss_value = test_step(x_batch_val_k, y_batch_val)
         avg_loss_val += loss_value
     avg_loss_val /= (step+1)
+    if avg_loss_val < best_val_loss:
+        model.save_weights("./output_MIL/best_model_weights_MIL.h5")
 
     val_acc = val_acc_metric.result()
     print("Validation loss: %.4f" % (float(avg_loss_val),))
