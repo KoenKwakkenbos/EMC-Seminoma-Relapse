@@ -142,8 +142,8 @@ class MILdatagen(tf.keras.utils.Sequence):
         Inorm[Inorm>255] = 254
         Inorm = np.reshape(Inorm.T, (h, w, 3)).astype(np.uint8)
 
-        #Inorm = cv2.normalize(Inorm, None, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_32F)
-        Inorm = preprocess_input(Inorm)
+        Inorm = cv2.normalize(Inorm, None, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_32F)
+        #Inorm = preprocess_input(Inorm)
 
         return Inorm
 
@@ -176,13 +176,52 @@ val_gen = MILdatagen(list(pat_val), y_val, 224, batch_size=16, train=False)
 
 
 
-inputs = keras.Input(shape=(224, 224, 3), name="digits")
-x1 = ResNet50(include_top=False, weights='imagenet', pooling='max')(inputs)
-outputs = layers.Dense(1, name="predictions")(x1)
-model = keras.Model(inputs=inputs, outputs=outputs)
+#inputs = keras.Input(shape=(224, 224, 3), name="digits")
+#x1 = ResNet50(include_top=False, weights='imagenet', pooling='max')(inputs)
+#outputs = layers.Dense(1, name="predictions")(x1)
+#model = keras.Model(inputs=inputs, outputs=outputs)
 #model.layers[1].trainable = False
 
-print(model.summary())
+model = keras.Sequential([
+    layers.BatchNormalization(input_shape=(224,224,3)),
+    layers.Conv2D(64,kernel_size=(3,3)),
+    layers.BatchNormalization(),
+    keras.layers.ReLU(),
+    layers.Conv2D(64,kernel_size=(3,3)),
+    layers.BatchNormalization(),
+    keras.layers.ReLU(),
+    layers.MaxPooling2D(pool_size=((2,2))),
+    layers.Conv2D(128,kernel_size=(3,3)),
+    layers.BatchNormalization(),
+    keras.layers.ReLU(),
+    layers.Conv2D(128,kernel_size=(3,3)),
+    layers.BatchNormalization(),
+    keras.layers.ReLU(),
+    layers.MaxPooling2D(pool_size=((2,2))),
+    layers.Conv2D(256,kernel_size=(3,3)),
+    layers.BatchNormalization(),
+    keras.layers.ReLU(),
+    layers.Conv2D(256,kernel_size=(3,3)),
+    layers.BatchNormalization(),
+    keras.layers.ReLU(),
+    layers.MaxPooling2D(pool_size=((2,2))),
+    layers.Conv2D(512,kernel_size=(3,3)),
+    layers.BatchNormalization(),
+    keras.layers.ReLU(),
+    layers.Conv2D(512,kernel_size=(3,3)),
+    layers.BatchNormalization(),
+    keras.layers.ReLU(),
+    layers.Conv2D(512,kernel_size=(3,3)),
+    layers.BatchNormalization(),
+    keras.layers.ReLU(),
+    layers.MaxPooling2D(pool_size=((2,2))),
+    layers.GlobalAveragePooling2D(),
+    layers.Dense(512, activation='relu'),
+    layers.Dense(256, activation='relu'),
+    layers.Dense(1),
+])
+print (model.summary())
+
 
 # Instantiate an optimizer.
 optimizer = keras.optimizers.Adam()
@@ -283,7 +322,7 @@ for epoch in range(epochs):
         avg_loss_val += loss_value
     avg_loss_val /= (step+1)
     if avg_loss_val < best_val_loss:
-        model.save_weights("./output_MIL/best_model_weights_MIL.h5")
+        model.save_weights("./output_MIL_small/best_model_weights_MILsmall.h5")
 
     val_acc = val_acc_metric.result()
     print("Validation loss: %.4f" % (float(avg_loss_val),))
