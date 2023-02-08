@@ -28,7 +28,7 @@ class MILdatagen(tf.keras.utils.Sequence):
         self.tile_outcome_list = []
 
         for pat in self.pat_list:
-            for root, subdirs, files in os.walk('./Tiles/' + str(pat)):
+            for root, subdirs, files in os.walk('/data/scratch/kkwakkenbos/Tiles_downsampled_1024/' + str(pat)):
                 for dir in subdirs:
                     self.slide_list.append((pat, dir))
 
@@ -49,7 +49,7 @@ class MILdatagen(tf.keras.utils.Sequence):
 
     def __getitem__(self, idx):
         tile_list = []
-        for root, subdirs, files in os.walk('./Tiles/' + str(self.slide_list[idx][0]) + '/' + str(self.slide_list[idx][1])):
+        for root, subdirs, files in os.walk('/data/scratch/kkwakkenbos/Tiles_downsampled_1024/' + str(self.slide_list[idx][0]) + '/' + str(self.slide_list[idx][1])):
             for file in files:
                 tile_list.append(os.path.join(root, file))
 
@@ -192,6 +192,7 @@ loss_fn = keras.losses.BinaryCrossentropy(from_logits=True)
 train_acc_metric = keras.metrics.BinaryAccuracy()
 val_acc_metric = keras.metrics.BinaryAccuracy()
 
+
 @tf.function
 def train_step(x, y):    
     with tf.GradientTape() as tape:
@@ -230,20 +231,20 @@ def test_step(x, y):
 reduce_lr = tf.keras.callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.2,
                               patience=10, min_lr=0.000001)
 
-_callbacks = [reduce_lr]
+#_callbacks = [reduce_lr]
 
-callbacks = tf.keras.callbacks.CallbackList(
-    _callbacks, add_history=True, model=model)
+#callbacks = tf.keras.callbacks.CallbackList(
+#    _callbacks, add_history=True, model=model)
 
 
 epochs = 200
 best_val_loss = np.Inf
 
 logs = {}
-callbacks.on_train_begin()
+#callbacks.on_train_begin()
 for epoch in range(epochs):
 
-    callbacks.on_epoch_begin(epoch, logs=logs)
+    reduce_lr.on_epoch_begin(epoch, logs=logs)
     avg_loss = 0
     avg_loss_val = 0
 
