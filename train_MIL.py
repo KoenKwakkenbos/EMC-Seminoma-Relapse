@@ -257,6 +257,10 @@ def train_step(x, y):
     return loss_value
 
 @tf.function
+def inference_step(x):
+    return model(x, training=False)
+
+@tf.function
 def test_step(x, y):
     val_logits = model(x, training=False)
     val_acc_metric.update_state(y, val_logits)
@@ -300,7 +304,7 @@ for epoch in range(epochs):
     # Iterate over the batches of the dataset.
     logits = tf.zeros([0, 1])
     for step, (x_batch_train, y_batch_train) in enumerate(tqdm(train_gen)):
-        logits_batch = model(x_batch_train)
+        logits_batch = inference_step(x_batch_train)
         logits = tf.concat([logits, logits_batch], 0)
     
     pats = train_gen.slide_tile_list[:min(len(train_gen.slide_tile_list), logits.shape[0])]
@@ -323,7 +327,7 @@ for epoch in range(epochs):
     # validation
     logits = tf.zeros([0, 1])
     for step, (x_batch_val, y_batch_val) in enumerate(tqdm(val_gen)):
-        logits_batch = model(x_batch_val)
+        logits_batch = inference_step(x_batch_val)
         logits = tf.concat([logits, logits_batch], 0)
     
     pats = val_gen.slide_tile_list[:min(len(val_gen.slide_tile_list), logits.shape[0])]
