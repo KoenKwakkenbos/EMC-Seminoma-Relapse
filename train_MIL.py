@@ -32,7 +32,8 @@ class MILdatagen(tf.keras.utils.Sequence):
                 for file in files:
                     self.tile_list.append(os.path.join(root, file))
                     self.tile_outcome_list.append(self.pat_outcome_list[patient])
-                    self.slide_tile_list.append(patient)
+                    self.slide_tile_list.append(os.path.basename(root))
+
         self.on_epoch_end()
 
     def __len__(self):
