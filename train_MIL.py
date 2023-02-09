@@ -5,7 +5,7 @@ from tensorflow import keras
 from tensorflow.keras import layers
 from tensorflow.keras.applications import ResNet50
 from tensorflow.keras.applications.resnet50 import preprocess_input
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, StratifiedKFold
 import os
 import random
 import tensorflow as tf
@@ -13,6 +13,7 @@ import pandas as pd
 import numpy as np
 import cv2
 from tqdm import tqdm
+import tensorflow.keras.backend as K
 
 from concurrent.futures import ThreadPoolExecutor
 
@@ -168,186 +169,203 @@ class MILdatagen(tf.keras.utils.Sequence):
 
 
 patient_data = pd.read_csv('./Seminoma_Outcomes_AnonSelection_20230124.csv', header=0).set_index('AnonPID')
-    
-pat_train, pat_val, y_train, y_val = train_test_split(
-    patient_data.index, patient_data['Meta'], test_size=0.25, random_state=42,
-    stratify=patient_data['Meta']
-)
-train_gen = MILdatagen(list(pat_train), y_train, 224, batch_size=16, train=True)
-val_gen = MILdatagen(list(pat_val), y_val, 224, batch_size=16, train=False)
+
+skf = StratifiedKFold(n_splits=3)
+skf.get_n_splits(patient_data.index, patient_data['Meta'])
+
+for i, (train_index, test_index) in enumerate(skf.split(patient_data.index, patient_data['Meta'])):
+    K.clear_session()
+    print(f"Fold {i}:")
+    print(f"  Train: index={train_index}")
+    print(f"  Test:  index={test_index}")
+
+    print(patient_data.iloc[train_index])
+
+    train_gen = MILdatagen(list(patient_data.iloc[train_index].index), patient_data['Meta'].iloc[train_index], 224, batch_size=64, train=True)
+    val_gen = MILdatagen(list(patient_data.iloc[test_index].index), patient_data['Meta'].iloc[test_index], 224, batch_size=64, train=False)
+
+    #inputs = keras.Input(shape=(224, 224, 3), name="digits")
+    #x1 = ResNet50(include_top=False, weights='imagenet', pooling='max')(inputs)
+    #outputs = layers.Dense(1, name="predictions")(x1)
+    #model = keras.Model(inputs=inputs, outputs=outputs)
+    #model.layers[1].trainable = False
+
+    model = keras.Sequential([
+        layers.BatchNormalization(input_shape=(224,224,3)),
+        layers.Conv2D(64,kernel_size=(3,3)),
+        layers.BatchNormalization(),
+        keras.layers.ReLU(),
+        layers.Conv2D(64,kernel_size=(3,3)),
+        layers.BatchNormalization(),
+        keras.layers.ReLU(),
+        layers.MaxPooling2D(pool_size=((2,2))),
+        layers.Conv2D(128,kernel_size=(3,3)),
+        layers.BatchNormalization(),
+        keras.layers.ReLU(),
+        layers.Conv2D(128,kernel_size=(3,3)),
+        layers.BatchNormalization(),
+        keras.layers.ReLU(),
+        layers.MaxPooling2D(pool_size=((2,2))),
+        layers.Conv2D(256,kernel_size=(3,3)),
+        layers.BatchNormalization(),
+        keras.layers.ReLU(),
+        layers.Conv2D(256,kernel_size=(3,3)),
+        layers.BatchNormalization(),
+        keras.layers.ReLU(),
+        layers.MaxPooling2D(pool_size=((2,2))),
+        layers.Conv2D(512,kernel_size=(3,3)),
+        layers.BatchNormalization(),
+        keras.layers.ReLU(),
+        layers.Conv2D(512,kernel_size=(3,3)),
+        layers.BatchNormalization(),
+        keras.layers.ReLU(),
+        layers.Conv2D(512,kernel_size=(3,3)),
+        layers.BatchNormalization(),
+        keras.layers.ReLU(),
+        layers.MaxPooling2D(pool_size=((2,2))),
+        layers.GlobalAveragePooling2D(),
+        layers.Dense(512, activation='relu'),
+        layers.Dense(256, activation='relu'),
+        layers.Dense(1),
+    ])
+    print (model.summary())
 
 
+    # Instantiate an optimizer.
+    optimizer = keras.optimizers.Adam()
+    # Instantiate a loss function.
+    loss_fn = keras.losses.BinaryCrossentropy(from_logits=True)
 
-#inputs = keras.Input(shape=(224, 224, 3), name="digits")
-#x1 = ResNet50(include_top=False, weights='imagenet', pooling='max')(inputs)
-#outputs = layers.Dense(1, name="predictions")(x1)
-#model = keras.Model(inputs=inputs, outputs=outputs)
-#model.layers[1].trainable = False
-
-model = keras.Sequential([
-    layers.BatchNormalization(input_shape=(224,224,3)),
-    layers.Conv2D(64,kernel_size=(3,3)),
-    layers.BatchNormalization(),
-    keras.layers.ReLU(),
-    layers.Conv2D(64,kernel_size=(3,3)),
-    layers.BatchNormalization(),
-    keras.layers.ReLU(),
-    layers.MaxPooling2D(pool_size=((2,2))),
-    layers.Conv2D(128,kernel_size=(3,3)),
-    layers.BatchNormalization(),
-    keras.layers.ReLU(),
-    layers.Conv2D(128,kernel_size=(3,3)),
-    layers.BatchNormalization(),
-    keras.layers.ReLU(),
-    layers.MaxPooling2D(pool_size=((2,2))),
-    layers.Conv2D(256,kernel_size=(3,3)),
-    layers.BatchNormalization(),
-    keras.layers.ReLU(),
-    layers.Conv2D(256,kernel_size=(3,3)),
-    layers.BatchNormalization(),
-    keras.layers.ReLU(),
-    layers.MaxPooling2D(pool_size=((2,2))),
-    layers.Conv2D(512,kernel_size=(3,3)),
-    layers.BatchNormalization(),
-    keras.layers.ReLU(),
-    layers.Conv2D(512,kernel_size=(3,3)),
-    layers.BatchNormalization(),
-    keras.layers.ReLU(),
-    layers.Conv2D(512,kernel_size=(3,3)),
-    layers.BatchNormalization(),
-    keras.layers.ReLU(),
-    layers.MaxPooling2D(pool_size=((2,2))),
-    layers.GlobalAveragePooling2D(),
-    layers.Dense(512, activation='relu'),
-    layers.Dense(256, activation='relu'),
-    layers.Dense(1),
-])
-print (model.summary())
+    train_acc_metric = keras.metrics.BinaryAccuracy()
+    val_acc_metric = keras.metrics.BinaryAccuracy()
+    val_auc_metric = tf.keras.metrics.AUC(from_logits=True)
 
 
-# Instantiate an optimizer.
-optimizer = keras.optimizers.Adam()
-# Instantiate a loss function.
-loss_fn = keras.losses.BinaryCrossentropy(from_logits=True)
+    @tf.function
+    def train_step(x, y):
+        with tf.GradientTape() as tape:
 
-train_acc_metric = keras.metrics.BinaryAccuracy()
-val_acc_metric = keras.metrics.BinaryAccuracy()
+            # Run the forward pass of the layer.
+            # The operations that the layer applies
+            # to its inputs are going to be recorded
+            # on the GradientTape.
+            logits = model(x, training=True)  # Logits for this minibatch
+            
+            # Compute the loss value for this minibatch.
+            loss_value = loss_fn(y, logits)
+        # Use the gradient tape to automatically retrieve
+        # the gradients of the trainable variables with respect to the loss.
+        grads = tape.gradient(loss_value, model.trainable_weights)
+
+        # Run one step of gradient descent by updating
+        # the value of the variables to minimize the loss.
+        optimizer.apply_gradients(zip(grads, model.trainable_weights))
+        train_acc_metric.update_state(y, logits)
+
+        return loss_value
+
+    @tf.function
+    def inference_step(x):
+        return model(x, training=False)
+
+    @tf.function
+    def test_step(x, y):
+        val_logits = model(x, training=False)
+        val_acc_metric.update_state(y, val_logits)
+        val_auc_metric.update_state(y, val_logits)
+        loss_value = loss_fn(y, val_logits)
+        return loss_value
+
+    reduce_lr = tf.keras.callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.1,
+                                patience=10, min_lr=0.000001, verbose=1)
+
+    early_stop = tf.keras.callbacks.EarlyStopping(monitor='loss', patience=15, verbose=1)
+
+    def group_argtopk(groups, data,k=5):
+        data = data.numpy().ravel()
+        order = np.lexsort((data, groups))
+        groups = np.array(groups)
+        groups = groups[order]
+        data = data[order]
+        index = np.empty(len(groups), 'bool')
+        index[-k:] = True
+        index[:-k] = groups[k:] != groups[:-k]
+        return list(order[index])
 
 
-@tf.function
-def train_step(x, y):    
-    with tf.GradientTape() as tape:
+    epochs = 200
+    best_val_loss = np.Inf
+    best_val_auc = -np.Inf
 
-        # Run the forward pass of the layer.
-        # The operations that the layer applies
-        # to its inputs are going to be recorded
-        # on the GradientTape.
-        logits = model(x, training=True)  # Logits for this minibatch
+    reduce_lr.on_train_begin()
+    early_stop.on_train_begin()
+
+    for epoch in range(epochs):
+
+        reduce_lr.on_epoch_begin(epoch)
+        early_stop.on_epoch_begin(epoch)
+        avg_loss = 0
+        avg_loss_val = 0
+
+        print("\nStart of epoch %d" % (epoch,))
+
+        # Iterate over the batches of the dataset.
+        logits = tf.zeros([0, 1])
+        for step, (x_batch_train, y_batch_train) in enumerate(tqdm(train_gen)):
+            logits_batch = inference_step(x_batch_train)
+            logits = tf.concat([logits, logits_batch], 0)
         
-        # Compute the loss value for this minibatch.
-        loss_value = loss_fn(y, logits)
-    # Use the gradient tape to automatically retrieve
-    # the gradients of the trainable variables with respect to the loss.
-    grads = tape.gradient(loss_value, model.trainable_weights)
+        pats = train_gen.slide_tile_list[:min(len(train_gen.slide_tile_list), logits.shape[0])]
+        topk_idx = group_argtopk(pats, logits, k=10)
 
-    # Run one step of gradient descent by updating
-    # the value of the variables to minimize the loss.
-    optimizer.apply_gradients(zip(grads, model.trainable_weights))
-    train_acc_metric.update_state(y, logits)
+        train_gen.topk_dataset(topk_idx)
+        for step, (x_batch_train, y_batch_train) in enumerate(tqdm(train_gen)):
+            loss_value = train_step(x_batch_train, y_batch_train)
+            avg_loss += loss_value
 
-    return loss_value
+        avg_loss /= (step+1)
 
-@tf.function
-def inference_step(x):
-    return model(x, training=False)
+        train_acc = train_acc_metric.result()
+        print("Training acc over epoch: %.4f" % (float(train_acc),))
+        print(
+            "Training loss (for one batch) at step %d: %.4f"
+            % (step, float(avg_loss))
+        )
 
-@tf.function
-def test_step(x, y):
-    val_logits = model(x, training=False)
-    val_acc_metric.update_state(y, val_logits)
+        # validation
+        logits = tf.zeros([0, 1])
+        for step, (x_batch_val, y_batch_val) in enumerate(tqdm(val_gen)):
+            logits_batch = inference_step(x_batch_val)
+            logits = tf.concat([logits, logits_batch], 0)
+        
+        pats = val_gen.slide_tile_list[:min(len(val_gen.slide_tile_list), logits.shape[0])]
+        topk_idx = group_argtopk(pats, logits, k=10)
 
-    loss_value = loss_fn(y, val_logits)
-    return loss_value
+        val_gen.topk_dataset(topk_idx)
 
-reduce_lr = tf.keras.callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.2,
-                              patience=10, min_lr=0.000001)
+        for step, (x_batch_val, y_batch_val) in enumerate(tqdm(val_gen)):
+            loss_value = test_step(x_batch_val, y_batch_val)
+            avg_loss_val += loss_value
+        avg_loss_val /= (step+1)
+        if avg_loss_val < best_val_loss:
+            #model.save_weights(f"./output_MIL_small/best_model_weights_MILsmall_loss_fold{i+1}.h5")
+            best_val_loss = avg_loss_val
+            print('save!')
 
-#_callbacks = [reduce_lr]
+        val_acc = val_acc_metric.result()
+        val_auc = val_auc_metric.result()
+        if val_auc > best_val_auc:
+            #model.save_weights(f"./output_MIL_small/best_model_weights_MILsmall_auc_fold{i+1}.h5")
+            best_val_auc = val_auc
 
-#callbacks = tf.keras.callbacks.CallbackList(
-#    _callbacks, add_history=True, model=model)
+        print("Validation loss: %.4f" % (float(avg_loss_val),))
+        print("Validation acc: %.4f" % (float(val_acc),))
+        print("Validation auc: %.4f" % (float(val_auc),))
 
-def group_argtopk(groups, data,k=5):
-    data = data.numpy().ravel()
-    order = np.lexsort((data, groups))
-    groups = np.array(groups)
-    groups = groups[order]
-    data = data[order]
-    index = np.empty(len(groups), 'bool')
-    index[-k:] = True
-    index[:-k] = groups[k:] != groups[:-k]
-    return list(order[index])
+        train_acc_metric.reset_states()
+        val_acc_metric.reset_states()
+        val_auc_metric.reset_states()
+        train_gen.on_epoch_end()
+        val_gen.on_epoch_end()
 
-
-epochs = 200
-best_val_loss = np.Inf
-
-logs = {}
-#callbacks.on_train_begin()
-for epoch in range(epochs):
-
-    reduce_lr.on_epoch_begin(epoch, logs=logs)
-    avg_loss = 0
-    avg_loss_val = 0
-
-    print("\nStart of epoch %d" % (epoch,))
-
-    # Iterate over the batches of the dataset.
-    logits = tf.zeros([0, 1])
-    for step, (x_batch_train, y_batch_train) in enumerate(tqdm(train_gen)):
-        logits_batch = inference_step(x_batch_train)
-        logits = tf.concat([logits, logits_batch], 0)
-    
-    pats = train_gen.slide_tile_list[:min(len(train_gen.slide_tile_list), logits.shape[0])]
-    topk_idx = group_argtopk(pats, logits, k=5)
-
-    train_gen.topk_dataset(topk_idx)
-    for step, (x_batch_train, y_batch_train) in enumerate(tqdm(train_gen)):
-        loss_value = train_step(x_batch_train, y_batch_train)
-        avg_loss += loss_value
-
-    avg_loss /= (step+1)
-
-    train_acc = train_acc_metric.result()
-    print("Training acc over epoch: %.4f" % (float(train_acc),))
-    print(
-        "Training loss (for one batch) at step %d: %.4f"
-        % (step, float(avg_loss))
-    )
-
-    # validation
-    logits = tf.zeros([0, 1])
-    for step, (x_batch_val, y_batch_val) in enumerate(tqdm(val_gen)):
-        logits_batch = inference_step(x_batch_val)
-        logits = tf.concat([logits, logits_batch], 0)
-    
-    pats = val_gen.slide_tile_list[:min(len(val_gen.slide_tile_list), logits.shape[0])]
-    topk_idx = group_argtopk(pats, logits, k=5)
-
-    val_gen.topk_dataset(topk_idx)
-
-    for step, (x_batch_val, y_batch_val) in enumerate(tqdm(val_gen)):
-        loss_value = test_step(x_batch_val, y_batch_val)
-        avg_loss_val += loss_value
-    avg_loss_val /= (step+1)
-    if avg_loss_val < best_val_loss:
-        model.save_weights("./output_MIL_small/best_model_weights_MILsmall.h5")
-
-    val_acc = val_acc_metric.result()
-    print("Validation loss: %.4f" % (float(avg_loss_val),))
-    print("Validation acc: %.4f" % (float(val_acc),))
-
-    train_acc_metric.reset_states()
-    val_acc_metric.reset_states()
-    train_gen.on_epoch_end()
-    val_gen.on_epoch_end()
+    print(f'----------------------------- Fold {i+1} completed -----------------------------')
