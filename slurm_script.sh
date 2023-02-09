@@ -4,8 +4,8 @@
 #SBATCH -p short           ### The queue to submit to: express, short, long, interactive
 #SBATCH --gres=gpu:1         ### How many GPUs do you need?
 #SBATCH -t 0-48:00:00        ### The time limit in D-hh:mm:ss format
-#SBATCH -o /trinity/home/kkwakkenbos/repositories/EMC-Seminoma-Relapse/output_MIL_short/out_%j.log        ### Where to store the console output (%j is the job number)
-#SBATCH -e /trinity/home/kkwakkenbos/repositories/EMC-Seminoma-Relapse/output_MIL_short/error_%j.log      ### Where to store the error output
+#SBATCH -o /trinity/home/kkwakkenbos/repositories/EMC-Seminoma-Relapse/output_MIL_kfold/out_%j.log        ### Where to store the console output (%j is the job number)
+#SBATCH -e /trinity/home/kkwakkenbos/repositories/EMC-Seminoma-Relapse/output_MIL_kfold/error_%j.log      ### Where to store the error output
 #SBATCH --job-name=MIL_resnet  ### Name your job so you can distinguish between jobs
 
 # Load the modules

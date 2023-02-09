@@ -348,14 +348,13 @@ for i, (train_index, test_index) in enumerate(skf.split(patient_data.index, pati
             avg_loss_val += loss_value
         avg_loss_val /= (step+1)
         if avg_loss_val < best_val_loss:
-            #model.save_weights(f"./output_MIL_small/best_model_weights_MILsmall_loss_fold{i+1}.h5")
+            model.save_weights(f"./output_MIL_kfold/best_model_weights_MILsmall_loss_fold{i+1}.h5")
             best_val_loss = avg_loss_val
-            print('save!')
 
         val_acc = val_acc_metric.result()
         val_auc = val_auc_metric.result()
         if val_auc > best_val_auc:
-            #model.save_weights(f"./output_MIL_small/best_model_weights_MILsmall_auc_fold{i+1}.h5")
+            model.save_weights(f"./output_MIL_kfold/best_model_weights_MILsmall_auc_fold{i+1}.h5")
             best_val_auc = val_auc
 
         print("Validation loss: %.4f" % (float(avg_loss_val),))
