@@ -4,18 +4,57 @@ import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
 from tensorflow.keras.applications import ResNet50
-from datagenerator import MILdatagen
+from datagenerator import Datagen
 from sklearn.model_selection import train_test_split
 import os
 
 
 def create_model(input_shape=(224, 224, 3)):
-    inputs = layers.Input(input_shape, name ='input')
-    resnet = ResNet50(include_top=False, weights=None, pooling='max')(inputs)
-    output = layers.Dense(1, activation='sigmoid')(resnet)
+    #inputs = layers.Input(input_shape, name ='input')
+    #resnet = ResNet50(include_top=False, weights=None, pooling='max')(inputs)
+    #x = layers.Dropout(0.5)(resnet)
+    #output = layers.Dense(1, activation='sigmoid')(x)
 
-    model = keras.Model(inputs, output)
-    print(model.summary())
+    #model = keras.Model(inputs, output)
+    #print(model.summary())
+    model = keras.Sequential([
+    layers.BatchNormalization(input_shape=input_shape),
+    layers.Conv2D(64,kernel_size=(3,3)),
+    keras.layers.ReLU(),
+    layers.BatchNormalization(),
+    layers.Conv2D(64,kernel_size=(3,3)),
+    keras.layers.ReLU(),
+    layers.BatchNormalization(),
+    layers.MaxPooling2D(pool_size=((2,2))),
+    layers.Conv2D(128,kernel_size=(3,3)),
+    keras.layers.ReLU(),
+    layers.BatchNormalization(),
+    layers.Conv2D(128,kernel_size=(3,3)),
+    keras.layers.ReLU(),
+    layers.BatchNormalization(),
+    layers.MaxPooling2D(pool_size=((2,2))),
+    layers.Conv2D(256,kernel_size=(3,3)),
+    keras.layers.ReLU(),
+    layers.BatchNormalization(),
+    layers.Conv2D(256,kernel_size=(3,3)),
+    keras.layers.ReLU(),
+    layers.BatchNormalization(),
+    layers.MaxPooling2D(pool_size=((2,2))),
+    layers.Conv2D(512,kernel_size=(3,3)),
+    keras.layers.ReLU(),
+    layers.BatchNormalization(),
+    layers.Conv2D(512,kernel_size=(3,3)),
+    keras.layers.ReLU(),
+    layers.BatchNormalization(),
+    layers.Conv2D(512,kernel_size=(3,3)),
+    keras.layers.ReLU(),
+    layers.BatchNormalization(),
+    layers.MaxPooling2D(pool_size=((2,2))),
+    layers.GlobalMaxPooling2D(),
+    layers.Dense(512, activation='relu'),
+    layers.Dense(256, activation='relu'),
+    layers.Dense(1),
+    ])
 
     return model
 
@@ -94,18 +133,18 @@ if __name__ == "__main__":
     val_tile_outcome_list = []
 
     for patient in list(pat_train):
-        for root, subdirs, files in os.walk('/data/scratch/kkwakkenbos/Tiles_downsampled_1024/' + str(patient)):
+        for root, subdirs, files in os.walk('./Tiles/' + str(patient)):
             for file in files:
                 train_tile_outcome_list.append(y_train[patient])
 
     for patient in list(pat_val):
-        for root, subdirs, files in os.walk('/data/scratch/kkwakkenbos/Tiles_downsampled_1024/' + str(patient)):
+        for root, subdirs, files in os.walk('./Tiles/' + str(patient)):
             for file in files:
                 val_tile_outcome_list.append(y_val[patient])
 
 
-    train_gen = MILdatagen(list(pat_train), y_train, 224, batch_size=16, train=True)
-    val_gen = MILdatagen(list(pat_val), y_val, 224, batch_size=16, train=False)
+    train_gen = Datagen(list(pat_train), y_train, 224, batch_size=16, train=True)
+    val_gen = Datagen(list(pat_val), y_val, 224, batch_size=16, train=False)
 
     train_weights = compute_class_weights(train_tile_outcome_list)
 
