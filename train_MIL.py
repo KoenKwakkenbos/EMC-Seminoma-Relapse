@@ -272,8 +272,8 @@ for i, (train_index, test_index) in enumerate(skf.split(patient_data.index, pati
     def test_step(x, y):
         val_logits = model(x, training=False)
         val_acc_metric.update_state(y, val_logits)
-        val_auc_metric.update_state(y, val_logits)
-        loss_value = loss_fn(y, tf.nn.sigmoid(val_logits))
+        val_auc_metric.update_state(y, tf.nn.sigmoid(val_logits))
+        loss_value = loss_fn(y, val_logits)
         return loss_value
 
     reduce_lr = tf.keras.callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.1,
