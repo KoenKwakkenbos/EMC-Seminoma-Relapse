@@ -181,8 +181,8 @@ for i, (train_index, test_index) in enumerate(skf.split(patient_data.index, pati
 
     print(patient_data.iloc[train_index])
 
-    train_gen = MILdatagen(list(patient_data.iloc[train_index].index), patient_data['Meta'].iloc[train_index], 224, batch_size=64, train=True)
-    val_gen = MILdatagen(list(patient_data.iloc[test_index].index), patient_data['Meta'].iloc[test_index], 224, batch_size=64, train=False)
+    train_gen = MILdatagen(list(patient_data.iloc[train_index].index), patient_data['Meta'].iloc[train_index], 224, batch_size=32, train=True)
+    val_gen = MILdatagen(list(patient_data.iloc[test_index].index), patient_data['Meta'].iloc[test_index], 224, batch_size=32, train=False)
 
     #inputs = keras.Input(shape=(224, 224, 3), name="digits")
     #x1 = ResNet50(include_top=False, weights='imagenet', pooling='max')(inputs)
@@ -193,37 +193,37 @@ for i, (train_index, test_index) in enumerate(skf.split(patient_data.index, pati
     model = keras.Sequential([
         layers.BatchNormalization(input_shape=(224,224,3)),
         layers.Conv2D(64,kernel_size=(3,3)),
-        layers.BatchNormalization(),
         keras.layers.ReLU(),
+        layers.BatchNormalization(),
         layers.Conv2D(64,kernel_size=(3,3)),
-        layers.BatchNormalization(),
         keras.layers.ReLU(),
+        layers.BatchNormalization(),
         layers.MaxPooling2D(pool_size=((2,2))),
         layers.Conv2D(128,kernel_size=(3,3)),
-        layers.BatchNormalization(),
         keras.layers.ReLU(),
+        layers.BatchNormalization(),
         layers.Conv2D(128,kernel_size=(3,3)),
-        layers.BatchNormalization(),
         keras.layers.ReLU(),
+        layers.BatchNormalization(),
         layers.MaxPooling2D(pool_size=((2,2))),
         layers.Conv2D(256,kernel_size=(3,3)),
-        layers.BatchNormalization(),
         keras.layers.ReLU(),
+        layers.BatchNormalization(),
         layers.Conv2D(256,kernel_size=(3,3)),
-        layers.BatchNormalization(),
         keras.layers.ReLU(),
+        layers.BatchNormalization(),
         layers.MaxPooling2D(pool_size=((2,2))),
         layers.Conv2D(512,kernel_size=(3,3)),
-        layers.BatchNormalization(),
         keras.layers.ReLU(),
+        layers.BatchNormalization(),
         layers.Conv2D(512,kernel_size=(3,3)),
-        layers.BatchNormalization(),
         keras.layers.ReLU(),
+        layers.BatchNormalization(),
         layers.Conv2D(512,kernel_size=(3,3)),
-        layers.BatchNormalization(),
         keras.layers.ReLU(),
+        layers.BatchNormalization(),
         layers.MaxPooling2D(pool_size=((2,2))),
-        layers.GlobalAveragePooling2D(),
+        layers.GlobalMaxPooling2D(),
         layers.Dense(512, activation='relu'),
         layers.Dense(256, activation='relu'),
         layers.Dense(1),
@@ -238,7 +238,7 @@ for i, (train_index, test_index) in enumerate(skf.split(patient_data.index, pati
 
     train_acc_metric = keras.metrics.BinaryAccuracy()
     val_acc_metric = keras.metrics.BinaryAccuracy()
-    val_auc_metric = tf.keras.metrics.AUC(from_logits=True)
+    val_auc_metric = tf.keras.metrics.AUC()
 
 
     @tf.function
@@ -273,7 +273,7 @@ for i, (train_index, test_index) in enumerate(skf.split(patient_data.index, pati
         val_logits = model(x, training=False)
         val_acc_metric.update_state(y, val_logits)
         val_auc_metric.update_state(y, val_logits)
-        loss_value = loss_fn(y, val_logits)
+        loss_value = loss_fn(y, tf.nn.sigmoid(val_logits))
         return loss_value
 
     reduce_lr = tf.keras.callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.1,

@@ -131,11 +131,12 @@ dmypy.json
 TZ_08_G_HE_1/
 TZ_10_D_HE_1/
 Tiles/
+Tiles512/
 tmp/
 output*
 *.mrxs
 *.geojson
-*.png 
+*.png
 *.npy
 *.tif
 *.h5
