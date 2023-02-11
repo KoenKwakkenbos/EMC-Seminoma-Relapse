@@ -4,7 +4,7 @@ import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
 from tensorflow.keras.applications import ResNet50
-from datagenerator import Datagen
+from datagenerator import MILdatagen
 from sklearn.model_selection import train_test_split
 import os
 
@@ -53,7 +53,7 @@ def create_model(input_shape=(224, 224, 3)):
     layers.GlobalMaxPooling2D(),
     layers.Dense(512, activation='relu'),
     layers.Dense(256, activation='relu'),
-    layers.Dense(1),
+    layers.Dense(1, activation='sigmoid'),
     ])
 
     return model
@@ -133,18 +133,18 @@ if __name__ == "__main__":
     val_tile_outcome_list = []
 
     for patient in list(pat_train):
-        for root, subdirs, files in os.walk('./Tiles/' + str(patient)):
+        for root, subdirs, files in os.walk('/data/scratch/kkwakkenbos/Tiles_downsampled_1024/' + str(patient)):
             for file in files:
                 train_tile_outcome_list.append(y_train[patient])
 
     for patient in list(pat_val):
-        for root, subdirs, files in os.walk('./Tiles/' + str(patient)):
+        for root, subdirs, files in os.walk('/data/scratch/kkwakkenbos/Tiles_downsampled_1024/' + str(patient)):
             for file in files:
                 val_tile_outcome_list.append(y_val[patient])
 
 
-    train_gen = Datagen(list(pat_train), y_train, 224, batch_size=16, train=True)
-    val_gen = Datagen(list(pat_val), y_val, 224, batch_size=16, train=False)
+    train_gen = MILdatagen(list(pat_train), y_train, 224, batch_size=64, train=True)
+    val_gen = MILdatagen(list(pat_val), y_val, 224, batch_size=64, train=False)
 
     train_weights = compute_class_weights(train_tile_outcome_list)
 
