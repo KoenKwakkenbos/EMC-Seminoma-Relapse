@@ -1,15 +1,13 @@
 import os
 import random
 import tensorflow as tf
-import pandas as pd
 import numpy as np
 import cv2
-from tqdm import tqdm
 
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 
-class MILdatagen(tf.keras.utils.Sequence):
-    def __init__(self, slide_list, outcome_list, tile_size, batch_size =32, train=False):
+class Datagen(tf.keras.utils.Sequence):
+    def __init__(self, slide_list, outcome_list, tile_size, batch_size=32, train=False):
         self.slide_list = slide_list
         self.pat_outcome_list = outcome_list
         self.tile_size = tile_size
@@ -19,7 +17,7 @@ class MILdatagen(tf.keras.utils.Sequence):
         self.tile_outcome_list = []
 
         for patient in self.slide_list:
-            for root, subdirs, files in os.walk('/data/scratch/kkwakkenbos/Tiles_downsampled/' + str(patient)):
+            for root, subdirs, files in os.walk('./Tiles/' + str(patient)):
                 for file in files:
                     self.tile_list.append(os.path.join(root, file))
                     self.tile_outcome_list.append(self.pat_outcome_list[patient])
@@ -46,10 +44,6 @@ class MILdatagen(tf.keras.utils.Sequence):
         with ThreadPoolExecutor(max_workers=32) as executor:
             X = list(executor.map(lambda tile: self._process_image(tile), [self.tile_list[k] for k in indexes]))
 
-        #X = np.empty((self.batch_size, *self.tile_size))
-
-        #for i, file in enumerate([self.tile_list[k] for k in indexes]):
-        #    X[i,] = self._process_image(file)
         X = np.array(X)
         y = np.array([self.tile_outcome_list[k] for k in indexes])
 
@@ -154,3 +148,16 @@ class MILdatagen(tf.keras.utils.Sequence):
         self.indexes = np.arange(len(self.tile_list))
         if self.train:
             np.random.shuffle(self.indexes)
+
+
+class AEDatagen(Datagen):
+    def __getitem__(self, idx):
+        indexes = self.indexes[idx*self.batch_size:(idx+1)*self.batch_size]
+
+        with ThreadPoolExecutor(max_workers=32) as executor:
+            X = list(executor.map(lambda tile: self._process_image(tile), [self.tile_list[k] for k in indexes]))
+
+        X = np.array(X)
+
+        return X, X
+
