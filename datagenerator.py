@@ -3,16 +3,18 @@ import random
 import tensorflow as tf
 import numpy as np
 import cv2
+from tensorflow.keras.applications.resnet50 import preprocess_input
 
 from concurrent.futures import ThreadPoolExecutor
 
 class Datagen(tf.keras.utils.Sequence):
-    def __init__(self, slide_list, outcome_list, tile_size, batch_size=32, train=False):
+    def __init__(self, slide_list, outcome_list, tile_size, batch_size=32, train=False, imagenet=False):
         self.slide_list = slide_list
         self.pat_outcome_list = outcome_list
         self.tile_size = tile_size
         self.batch_size = batch_size
         self.train = train
+        self.imagenet = imagenet
         self.tile_list = []
         self.tile_outcome_list = []
 
@@ -128,7 +130,10 @@ class Datagen(tf.keras.utils.Sequence):
         Inorm[Inorm>255] = 254
         Inorm = np.reshape(Inorm.T, (h, w, 3)).astype(np.uint8)
 
-        Inorm = cv2.normalize(Inorm, None, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_32F)
+        if self.imagenet:
+            Inorm = preprocess_input(Inorm)
+        else:
+            Inorm = cv2.normalize(Inorm, None, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_32F)
 
         return Inorm
 
