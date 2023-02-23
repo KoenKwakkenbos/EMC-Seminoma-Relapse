@@ -1,65 +1,83 @@
+"""
+Script used to train the ResNet-50 classifier on the seminoma tiles.
+
+The file can be run with two arguments (input and output). The input
+path should be the folder containing the tiles. The output is optional
+but will be the folder where the models will be written to. The output
+path defaults to ./ (the current working directory).
+
+Author: Koen Kwakkenbos
+(k.kwakkenbos@student.tudelft.nl/k.kwakkenbos@gmail.com)
+Version: 1.0
+Date: Feb 2022
+"""
+
+import os
+import argparse
 import numpy as np
 import pandas as pd
 import tensorflow as tf
 from tensorflow import keras
-from tensorflow.keras import layers
-from tensorflow.keras.applications import ResNet50
 from datagenerator import Datagen
 from sklearn.model_selection import train_test_split, StratifiedKFold
 import tensorflow.keras.backend as K
 
+from models import create_classification_model
+from helpers import tar_path, dir_path
 
-def create_model(input_shape=(224, 224, 3)):
-    inputs = layers.Input(input_shape, name ='input')
-    resnet = ResNet50(include_top=False, weights=None, pooling='max')(inputs)
-    x = layers.Dropout(0.5)(resnet)
-    output = layers.Dense(1, activation='sigmoid')(x)
-    model = keras.Model(inputs, output)
-    model.layers[1].trainable = False
-    print(model.summary())
-    
+def parse_arguments():
     """
-    model = keras.Sequential([
-    layers.BatchNormalization(input_shape=input_shape),
-    layers.Conv2D(64,kernel_size=(3,3)),
-    keras.layers.ReLU(),
-    layers.BatchNormalization(),
-    layers.Conv2D(64,kernel_size=(3,3)),
-    keras.layers.ReLU(),
-    layers.BatchNormalization(),
-    layers.MaxPooling2D(pool_size=((2,2))),
-    layers.Conv2D(128,kernel_size=(3,3)),
-    keras.layers.ReLU(),
-    layers.BatchNormalization(),
-    layers.Conv2D(128,kernel_size=(3,3)),
-    keras.layers.ReLU(),
-    layers.BatchNormalization(),
-    layers.MaxPooling2D(pool_size=((2,2))),
-    layers.Conv2D(256,kernel_size=(3,3)),
-    keras.layers.ReLU(),
-    layers.BatchNormalization(),
-    layers.Conv2D(256,kernel_size=(3,3)),
-    keras.layers.ReLU(),
-    layers.BatchNormalization(),
-    layers.MaxPooling2D(pool_size=((2,2))),
-    layers.Conv2D(512,kernel_size=(3,3)),
-    keras.layers.ReLU(),
-    layers.BatchNormalization(),
-    layers.Conv2D(512,kernel_size=(3,3)),
-    keras.layers.ReLU(),
-    layers.BatchNormalization(),
-    layers.Conv2D(512,kernel_size=(3,3)),
-    keras.layers.ReLU(),
-    layers.BatchNormalization(),
-    layers.MaxPooling2D(pool_size=((2,2))),
-    layers.GlobalMaxPooling2D(),
-    layers.Dense(512, activation='relu'),
-    layers.Dense(256, activation='relu'),
-    layers.Dense(1, activation='sigmoid'),
-    ])
-    """
-    return model
+    Parse command line arguments.
 
+    Returns:
+    - argparse.Namespace: A namespace containing the parsed arguments.
+    """
+    parser = argparse.ArgumentParser(description="Process commandline arguments.")
+
+    parser.add_argument('-i', '--input', type=dir_path,
+                        help="Path to the stored tiles.",
+                        required=True)
+    parser.add_argument('-o', '--output', type=tar_path, nargs="?", const=1,
+                        help="Path to output folder.",
+                        default='./')
+
+    return parser.parse_args()
+
+
+def dir_path(path):
+    """
+    Check if a path is a directory.
+
+    Parameters:
+    - path (str): The path to check.
+
+    Returns:
+    - str: The validated path if it is a directory.
+
+    Raises:
+        NotADirectoryError: If the path is not a directory.
+    """
+    if os.path.isdir(path):
+        return path
+    raise NotADirectoryError(path)
+
+
+def tar_path(path):
+    """
+    Check if a path is a directory. If it is not, create the directory and return the path.
+
+    Parameters:
+    - path (str): The path to check.
+
+    Returns:
+    - str: The validated path as a directory.
+
+    """
+    if not os.path.isdir(path):
+        os.makedirs(path)
+        print(f"Output folder {path} created")
+        return path
+    return path
 
 def compute_class_weights(labels):
     labels = np.array(labels)
@@ -74,9 +92,8 @@ def compute_class_weights(labels):
     }
 
 
-def train(train_gen, val_gen, weights):
-
-    file_path = "./output_resnet_kfold/best_model_weights.h5"
+def train(train_gen, val_gen, weights, out_path, fold):
+    file_path = os.path.join(out_path, f"best_model_weights_fold{fold+1}.h5")
 
     # Initialize model checkpoint callback.
     model_checkpoint = keras.callbacks.ModelCheckpoint(
@@ -103,7 +120,7 @@ def train(train_gen, val_gen, weights):
     print('Number of devices {}'.format(strategy.num_replicas_in_sync))
 
     with strategy.scope():
-        model = create_model((224, 224, 3))
+        model = create_classification_model((224, 224, 3))
         model.compile(
             optimizer="adam", loss='binary_crossentropy', metrics=['accuracy', tf.keras.metrics.AUC()]
         )
@@ -123,8 +140,11 @@ def train(train_gen, val_gen, weights):
     return model
 
 
-if __name__ == "__main__":
-    patient_data = pd.read_csv('./Seminoma_Outcomes_AnonSelection_20230124.csv', header=0).set_index('AnonPID')
+def main():
+    # Get input from commandline
+    parsed_args = parse_arguments()
+
+    patient_data = pd.read_csv('./Seminoma_Outcomes_Anon.csv', header=0).set_index('AnonPID')
     
     skf = StratifiedKFold(n_splits=3)
     skf.get_n_splits(patient_data.index, patient_data['Meta'])
@@ -137,9 +157,13 @@ if __name__ == "__main__":
 
         print(patient_data.iloc[train_index])
 
-        train_gen = Datagen(list(patient_data.iloc[train_index].index), patient_data['Meta'].iloc[train_index], 224, batch_size=32, train=True, imagenet=True)
-        val_gen = Datagen(list(patient_data.iloc[test_index].index), patient_data['Meta'].iloc[test_index], 224, batch_size=32, train=False, imagenet=True)
+        train_gen = Datagen(list(patient_data.iloc[train_index].index), patient_data['Meta'].iloc[train_index], 224, parsed_args.input, batch_size=32, train=True, imagenet=True)
+        val_gen = Datagen(list(patient_data.iloc[test_index].index), patient_data['Meta'].iloc[test_index], 224, parsed_args.input, batch_size=32, train=False, imagenet=True)
 
         train_weights = compute_class_weights(patient_data['Meta'].iloc[train_index])
 
-        model = train(train_gen, val_gen, train_weights)
+        model = train(train_gen, val_gen, train_weights, parsed_args.output, i)
+
+
+if __name__ == "__main__":
+    main()
