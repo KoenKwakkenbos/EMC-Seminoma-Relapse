@@ -1,3 +1,19 @@
+"""
+Script used to generate tiles from WSIs (stored in .mrxs file format).
+
+The script takes 4 arguments: input path (where WSIs and annotations are stored), output path
+(where tiles are saved), tilesize (original region size) and magnification (at what level the 
+tiles are extracted). Please note that tiles are always saved in size 224x224, regardless of the
+tilesize set. This behaviour can be changed in the script itself.
+Tiles that contain less than 80% tissue are automatically rejected and not saved.
+The OPENSLIDE_PATH variable should be set to the bin folder in the openslide folder.
+
+Author: Koen Kwakkenbos
+(k.kwakkenbos@student.tudelft.nl/k.kwakkenbos@gmail.com)
+Version: 1.0
+Date: Feb 2022
+"""
+
 import os
 import argparse
 import json
@@ -6,12 +22,13 @@ from itertools import product
 import numpy as np
 import cv2
 from shapely.geometry import shape, box
-import matplotlib.pyplot as plt
 from tqdm import tqdm
-import glob
 
-# add openslide
-OPENSLIDE_PATH = r'c://users/koenk/documents/EMC-Seminoma-Relapse/openslide-win64/bin'
+from helpers import dir_path, tar_path
+
+# Add openslide.
+# ! ADD THIS PATH MANUALLY
+OPENSLIDE_PATH = r'.../openslide-win64/bin'
 if hasattr(os, 'add_dll_directory'):
     # Python >= 3.8 on Windows
     with os.add_dll_directory(OPENSLIDE_PATH):
@@ -21,6 +38,12 @@ else:
 
 
 def parse_arguments():
+    """
+    Parse command line arguments.
+
+    Returns:
+    - argparse.Namespace: A namespace containing the parsed arguments.
+    """
     parser = argparse.ArgumentParser(description="Process commandline arguments.")
 
     parser.add_argument('-i', '--input', type=dir_path,
@@ -39,25 +62,24 @@ def parse_arguments():
     return parser.parse_args()
 
 
-def dir_path(path):
-    if os.path.isdir(path):
-        return path
-    raise NotADirectoryError(path)
-
-
-def tar_path(path):
-    if not os.path.isdir(path):
-        os.makedirs(path)
-        print(f"Output folder {path} created")
-        return path
-    return path
-
-
 def tile_slide(annotation_path, tile_size, downsample):
+    """
+    Generate coordinates for tiles that overlap with annotations in a whole slide image.
+
+    Parameters:
+    - annotation_path (str): The path to the annotation file in GeoJSON format.
+    - tile_size (tuple): A tuple of the size of the tiles to be generated in pixels.
+    - downsample (int): The amount to downsample the image by.
+
+    Returns:
+    - tuple: A tuple containing a list of tile coordinates that overlap with annotations, and the number of tiles.
+
+    """
     # load annotation(s)
     with open(annotation_path, 'r', encoding="utf8") as file:
         annotation = json.load(file)
 
+    # Check if the annotation has holes (and if so, only take the exterior of the annotation)
     try:
         annotation_polys = [poly for poly in list(shape(f["geometry"]).geoms) for f in annotation["features"]]
     except:
@@ -107,11 +129,27 @@ def tile_slide(annotation_path, tile_size, downsample):
 
 
 def process_and_save_tile(slide, coord, tile_size, output_path):
+    """
+    Given a slide image, the coordinates of a tile in the slide image, the size of the tile,
+    and the output directory, extracts the tile, processes it, and saves it as a PNG file if
+    it contains more than 80% tissue.
+
+    Parameters:
+    - slide (OpenSlide object): An OpenSlide object representing a whole slide image.
+    - coord (tuple): A tuple of two integers representing the (x,y) coordinates of the top-left
+      corner of the tile.
+    - tile_size (int): Size of the tile(s) to generate in pixels.
+    - output_path (str): The path to the directory where the generated tile should be saved.
+
+    Returns:
+    - None
+    """
     offset_x = int(slide.properties['openslide.bounds-x'])
     offset_y = int(slide.properties['openslide.bounds-y'])
     tile = slide.read_region((offset_x + coord[0],offset_y + coord[1]), 2, (tile_size, tile_size))
     tile = np.asarray(tile)
 
+    # Convert to grayscale for threshold calculations.
     gray_tile = cv2.cvtColor(tile, cv2.COLOR_BGRA2GRAY)
 
     _, threshold_tile = cv2.threshold(gray_tile, 240, 255, cv2.THRESH_BINARY_INV)
@@ -120,7 +158,8 @@ def process_and_save_tile(slide, coord, tile_size, output_path):
     tissue_percentage = tissue_pixels / (threshold_tile.shape[0] * threshold_tile.shape[1]) * 100
 
     if tissue_percentage > 80:
-        cv2.imwrite(os.path.join(output_path, f"{coord[0]}_{coord[1]}.png"), cv2.cvtColor(tile, cv2.COLOR_RGBA2BGRA))
+        cv2.imwrite(os.path.join(output_path, f"{coord[0]}_{coord[1]}.png"),
+                    cv2.cvtColor(tile, cv2.COLOR_RGBA2BGRA))
 
 
 def main():
@@ -130,7 +169,7 @@ def main():
     base_dir = parsed_args.input
 
     image_annotation_paths = []
-    for dirpath, dirnames, filenames in os.walk(os.path.abspath(os.path.join(base_dir, 'Converted and anonymized'))):
+    for dirpath, _, filenames in os.walk(os.path.abspath(os.path.join(base_dir, 'Converted and anonymized'))):
         for filename in filenames:
             if filename.endswith('.mrxs'):
                 image_path = os.path.join(dirpath, filename)
@@ -147,21 +186,18 @@ def main():
         slide = openslide.open_slide(slide_path)
 
         objective_power = slide.properties['openslide.objective-power']
-        downsample = int(int(objective_power) / parsed_args.magnification)
+        downsample = 2 * int(int(objective_power) / parsed_args.magnification)
 
         tiles_coords, num_tiles = tile_slide(annotation_path, tile_size, downsample)
 
-        # FOR TESTING PURPOSES:
-        # tiles_coords = tiles_coords[:25]
-
         print(f'Processing slide {slide_path}: generating {num_tiles} tiles.')
-
-        # Uncomment this code to use multiple threads to process WSI
 
         tar_path(output_path)
 
+        # Multithreading is used to accelerate writing the extraction and saving of tiles.
         with ThreadPoolExecutor() as executor:
-            list(tqdm(executor.map(lambda coord: process_and_save_tile(slide, coord, tile_size[0], output_path), tiles_coords)))
+            list(tqdm(executor.map(lambda coord: process_and_save_tile(slide, coord, tile_size[0], output_path),
+                                   tiles_coords)))
 
         print('----' * 8)
 
