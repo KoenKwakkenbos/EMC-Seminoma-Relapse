@@ -1,7 +1,14 @@
 """
-Short description of the script goes here.
+File containing the three models corresponding to the three approaches used.
 
-Longer description of the script and its purpose can go here.
+The classification and autoencoder models are both defined through the Keras
+Model class.
+The MIL model is defined as a Sequential model. This is because it was re-used from
+a previous project. Within the scope of this current project, there is no difference in
+the functioning of the three different model classes. 
+All three models are defined in functions (create_[type]_model), that are called in the
+training scripts. For the classification model, the parameter trainable can be used to
+indicate whether the ResNet-50 model should have fixed weights during training.
 
 Author: Koen Kwakkenbos
 (k.kwakkenbos@student.tudelft.nl/k.kwakkenbos@gmail.com)

@@ -27,4 +27,3 @@ To reproduce the tiling, a specific folder structure should be used:
 ```
 
 The structure in the example above reflects the way the database is set up currently (The patients are divided in smaller projects). The keywords 'Annotations' and 'Converted and anonymized' are hard-coded in the script. The root directory (Database) can be given through the command line input. The folders in 'Annotations' and 'Converted and anonymized' can have other names, as long as they are identical in both folders.
-

@@ -114,10 +114,8 @@ def group_argtopk(groups, data, k=10):
     return list(order[index])
 
 
-    
-
 if __name__ == "__main__":
-    parsed_args = parsed_args = parse_arguments()
+    parsed_args = parse_arguments()
     patient_data = pd.read_csv('./Seminoma_Outcomes_Anon.csv',
                                 header=0).set_index('AnonPID')
 

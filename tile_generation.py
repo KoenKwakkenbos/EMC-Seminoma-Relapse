@@ -7,7 +7,8 @@ tiles are extracted). Please note that tiles are always saved in size 224x224, r
 tilesize set. This behaviour can be changed in the script itself.
 Tiles that contain less than 80% tissue are automatically rejected and not saved.
 The OPENSLIDE_PATH variable should be set to the bin folder in the openslide folder.
-
+The script will save the tiles in folders with the structure: Patient ID --> Slide ID --> Tiles.
+ 
 Author: Koen Kwakkenbos
 (k.kwakkenbos@student.tudelft.nl/k.kwakkenbos@gmail.com)
 Version: 1.0
