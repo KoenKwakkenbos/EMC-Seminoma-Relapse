@@ -33,8 +33,10 @@ def create_classification_model(input_shape=(224, 224, 3), trainable=False):
     """
 
     inputs = layers.Input(input_shape, name='input')
-    resnet = ResNet50(include_top=False, weights=None, pooling='max')(inputs)
+    resnet = ResNet50(include_top=False, weights='imagenet', pooling='max')(inputs)
     x = layers.Dropout(0.5)(resnet)
+    x = layers.Dense(100)(x)
+    x = layers.Dense(50)(x)
     output = layers.Dense(1, activation='sigmoid')(x)
     model = keras.Model(inputs, output)
     model.layers[1].trainable = trainable
@@ -176,40 +178,40 @@ def create_MIL_model(input_shape=(224, 224, 3)):
     """
     model = keras.Sequential([
             layers.BatchNormalization(input_shape=input_shape),
-            layers.Conv2D(64,kernel_size=(3,3)),
+            layers.Conv2D(4 ,kernel_size=(3,3)),
             keras.layers.ReLU(),
             layers.BatchNormalization(),
-            layers.Conv2D(64,kernel_size=(3,3)),
-            keras.layers.ReLU(),
-            layers.BatchNormalization(),
-            layers.MaxPooling2D(pool_size=((2,2))),
-            layers.Conv2D(128,kernel_size=(3,3)),
-            keras.layers.ReLU(),
-            layers.BatchNormalization(),
-            layers.Conv2D(128,kernel_size=(3,3)),
-            keras.layers.ReLU(),
-            layers.BatchNormalization(),
-            layers.MaxPooling2D(pool_size=((2,2))),
-            layers.Conv2D(256,kernel_size=(3,3)),
-            keras.layers.ReLU(),
-            layers.BatchNormalization(),
-            layers.Conv2D(256,kernel_size=(3,3)),
-            keras.layers.ReLU(),
-            layers.BatchNormalization(),
-            layers.MaxPooling2D(pool_size=((2,2))),
-            layers.Conv2D(512,kernel_size=(3,3)),
-            keras.layers.ReLU(),
-            layers.BatchNormalization(),
-            layers.Conv2D(512,kernel_size=(3,3)),
-            keras.layers.ReLU(),
-            layers.BatchNormalization(),
-            layers.Conv2D(512,kernel_size=(3,3)),
-            keras.layers.ReLU(),
-            layers.BatchNormalization(),
-            layers.MaxPooling2D(pool_size=((2,2))),
+            # layers.Conv2D(8,kernel_size=(3,3)),
+            # keras.layers.ReLU(),
+            # layers.BatchNormalization(),
+            # layers.MaxPooling2D(pool_size=((2,2))),
+            # layers.Conv2D(128,kernel_size=(3,3)),
+            # keras.layers.ReLU(),
+            # layers.BatchNormalization(),
+            # layers.Conv2D(128,kernel_size=(3,3)),
+            # keras.layers.ReLU(),
+            # layers.BatchNormalization(),
+            # layers.MaxPooling2D(pool_size=((2,2))),
+            # layers.Conv2D(256,kernel_size=(3,3)),
+            # keras.layers.ReLU(),
+            # layers.BatchNormalization(),
+            # layers.Conv2D(256,kernel_size=(3,3)),
+            # keras.layers.ReLU(),
+            # layers.BatchNormalization(),
+            # layers.MaxPooling2D(pool_size=((2,2))),
+            # layers.Conv2D(512,kernel_size=(3,3)),
+            # keras.layers.ReLU(),
+            # layers.BatchNormalization(),
+            # layers.Conv2D(512,kernel_size=(3,3)),
+            # keras.layers.ReLU(),
+            # layers.BatchNormalization(),
+            # layers.Conv2D(512,kernel_size=(3,3)),
+            # keras.layers.ReLU(),
+            # layers.BatchNormalization(),
+            # layers.MaxPooling2D(pool_size=((2,2))),
             layers.GlobalMaxPooling2D(),
-            layers.Dense(512, activation='relu'),
-            layers.Dense(256, activation='relu'),
-            layers.Dense(1),
+            layers.Dense(10, activation='relu'),
+            layers.Dense(5, activation='relu'),
+            layers.Dense(1, activation='linear'),
         ])
     return model
