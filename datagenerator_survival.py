@@ -7,6 +7,15 @@ import cv2
 from concurrent.futures import ThreadPoolExecutor
 from tensorflow.keras.applications.resnet50 import preprocess_input
 
+def extract_identifier(filename):
+    # Attempt extraction using both hyphen and underscore separators
+    separators = ['-', '_']
+    for separator in separators:
+        parts = filename.split(separator)
+        if len(parts) >= 3:
+            identifier = separator.join(parts[:3])
+            return identifier
+    return None
 
 def _make_riskset(time: np.ndarray) -> np.ndarray:
     """Compute mask that represents each sample's risk set.
@@ -56,39 +65,52 @@ class Datagen(tf.keras.utils.Sequence):
     - imagenet (bool, optional): Whether to preprocess images for use with pre-trained Imagenet
       models. Default is False.
     """
-    def __init__(self, slide_list, outcome_list, time_list, tile_size, tile_path, batch_size=32, train=False, imagenet=False):
-        self.slide_list = slide_list
-        self.pat_outcome_list = outcome_list
-        self.pat_time_list = time_list
+    def __init__(self, df, tile_size, tile_path, batch_size=32, train=False, imagenet=False):
+        self.df = df
         self.tile_size = tile_size
         self.tile_path = tile_path
         self.batch_size = batch_size
         self.train = train
         self.imagenet = imagenet
-        self.tile_list = []
-        self.tile_outcome_list = []
-        self.tile_time_list = []
-        self.slide_tile_list = []
         self.minority_class_label = 1
-        # for patient in self.slide_list:
-        #     for root, _, files in os.walk(os.path.join(tile_path, str(patient))):
-        #         for file in files:
-        #             self.tile_list.append(os.path.join(root, file))
-        #             self.tile_outcome_list.append(self.pat_outcome_list[patient])
 
-        for patient in self.slide_list:
-            for file in glob.glob(f'{self.tile_path}/**/{patient}*.png'):
-                self.tile_list.append(file)
-                self.tile_outcome_list.append(self.pat_outcome_list[patient])
-                self.tile_time_list.append(self.pat_time_list[patient])
-                self.slide_tile_list.append(patient) # --> or purely on slide level?
+        # Make the index three chunks long
+        self.df.index = self.df.index.map(extract_identifier)
 
-        # Oversampling
-        # minority_class = np.where(np.array(self.tile_outcome_list) == self.minority_class_label)[0]
+        # Precompute the list of all image paths
+        self.tile_list = [os.path.join(subdir, file) 
+                           for subdir, dirs, files in os.walk(self.tile_path) 
+                           for file in files if file.lower().endswith(('.png', '.jpg', '.jpeg'))
+                           and extract_identifier(file) in self.df.index]
+        
+        if self.train:
+            # Perform oversampling
 
-        # self.tile_list.extend([self.tile_list[i] for i in minority_class])
-        # self.tile_outcome_list.extend([self.tile_outcome_list[i] for i in minority_class])
-        self.slide_tile_list = np.array(self.slide_tile_list)
+            labels = self.df.loc[[extract_identifier(os.path.basename(file)) for file in self.tile_list]]['Event'].to_list()
+            class_counts = {label: labels.count(label) for label in set(labels)}
+            print(f"Training --> oversampling. Class distribution before oversampling: {class_counts}")
+
+            majority_class = 0
+            minority_class = 1
+
+            num_oversample_majority = int(class_counts[majority_class] * 0.20)
+            num_oversample_minority = num_oversample_majority + (class_counts[majority_class] - class_counts[minority_class])
+
+            majority_images = [img for img, label in zip(self.tile_list, labels) if label == majority_class]
+            minority_images = [img for img, label in zip(self.tile_list, labels) if label == minority_class]
+
+            oversampled_majority = np.random.choice(majority_images, num_oversample_majority, replace=True)
+            oversampled_minority = np.random.choice(minority_images, num_oversample_minority, replace=True)
+
+            self.tile_list.extend(oversampled_majority.tolist())
+            self.tile_list.extend(oversampled_minority.tolist())
+
+            class_counts[majority_class] += num_oversample_majority
+            class_counts[minority_class] += num_oversample_minority
+            print(f"Class distribution after oversampling: {class_counts}")
+
+
+        print(self.tile_list[:5])
 
         self.on_epoch_end()
 
@@ -118,11 +140,15 @@ class Datagen(tf.keras.utils.Sequence):
 
         # ----------------------------------------
 
-        image_norm = image / 255.
-
+        
         if self.train:
-            image_norm = self._augment_image(image_norm)
-
+            image = self._augment_image(image)
+        
+        if self.imagenet:
+            image_norm = preprocess_input(image)
+        else:
+            image_norm = image / 255.
+        
         return image_norm
 
     def __getitem__(self, idx):
@@ -141,9 +167,12 @@ class Datagen(tf.keras.utils.Sequence):
         # with ThreadPoolExecutor(max_workers=32) as executor:
         #     X = list(executor.map(lambda tile: self._process_image(tile), [self.tile_list[k] for k in indexes]))
 
-        X = np.array([self._process_image(self.tile_list[k]) for k in indexes])
-        event = np.array([self.tile_outcome_list[k] for k in indexes])
-        time = np.array([self.tile_time_list[k] for k in indexes])
+        X_img = np.array([self._process_image(self.tile_list[k]) for k in indexes])
+        
+        batch_ids = [extract_identifier(os.path.basename(self.tile_list[k])) for k in indexes]
+        X_clin = np.array(self.df.loc[batch_ids][['LVI', 'RTI', 'Size']])
+        event = np.array(self.df.loc[batch_ids]['Event'])
+        time = np.array(self.df.loc[batch_ids]['Time'])
 
         labels = {
             "label_event": event.astype(np.int32),
@@ -151,7 +180,7 @@ class Datagen(tf.keras.utils.Sequence):
             "label_riskset": _make_riskset(time)
         }
 
-        return X, labels
+        return [X_img, X_clin], labels
 
     def _augment_image(self, img):
         """
@@ -167,9 +196,12 @@ class Datagen(tf.keras.utils.Sequence):
             rot = random.choice([cv2.ROTATE_90_CLOCKWISE, cv2.ROTATE_180, cv2.ROTATE_90_COUNTERCLOCKWISE])
             img = cv2.rotate(img, rot)
 
-        if random.random() < 0.5:
+        if random.random() < 0.75:
             flip = random.choice([-1, 0, 1])
             img = cv2.flip(img, flip)
+
+        if random.random() < 75:
+            img = cv2.convertScaleAbs(img, alpha=random.uniform(0.8, 1.2), beta=random.uniform(0.8, 1.2))
 
         return img
 
@@ -186,9 +218,10 @@ class Datagen(tf.keras.utils.Sequence):
 
 
 class DatagenMILSurv(Datagen):
-    def __init__(self, slide_list, outcome_list, time_list, tile_size, tile_path, batch_size=32, train=True, imagenet=False):
+    def __init__(self, df, tile_size, tile_path, batch_size=32, train=True, imagenet=False):
         # Call parent class's initialization
-        super().__init__(slide_list, outcome_list, time_list, tile_size, tile_path, batch_size, train, imagenet)
+        super().__init__(df, tile_size, tile_path, batch_size, train, imagenet)
+        self.slide_tile_list = np.array([extract_identifier(os.path.basename(file)) for file in self.tile_list])
 
     def topk_dataset(self, idx):
         """
