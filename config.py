@@ -1,5 +1,8 @@
 cohort_settings = {
-    'cohort_file': './Cohort_TCGA.xlsx',
+    'data_path': '/data/scratch/kkwakkenbos/Tiles_512_10x_normalized',
+    'cohort_file': '/data/scratch/kkwakkenbos/train_val_cohort.xlsx',
     'synchronous': 0,
-    'treatment': 1
+    'treatment': 0
 }
+
+# Also add model settings
