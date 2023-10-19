@@ -7,6 +7,7 @@ import cv2
 from concurrent.futures import ThreadPoolExecutor
 from tensorflow.keras.applications.resnet50 import preprocess_input
 
+
 def extract_identifier(filename):
     # Attempt extraction using both hyphen and underscore separators
     separators = ['-', '_']
@@ -79,9 +80,9 @@ class Datagen(tf.keras.utils.Sequence):
 
         # Precompute the list of all image paths
         self.tile_list = [os.path.join(subdir, file) 
-                           for subdir, dirs, files in os.walk(self.tile_path) 
-                           for file in files if file.lower().endswith(('.png', '.jpg', '.jpeg'))
-                           and extract_identifier(file) in self.df.index]
+                         for subdir, dirs, files in os.walk(self.tile_path)
+                         for file in files if file.lower().endswith(('.png'))
+                         and extract_identifier(file) in self.df.index]
         
         if self.train:
             # Perform oversampling
@@ -109,7 +110,6 @@ class Datagen(tf.keras.utils.Sequence):
             class_counts[minority_class] += num_oversample_minority
             print(f"Class distribution after oversampling: {class_counts}")
 
-
         print(self.tile_list[:5])
 
         self.on_epoch_end()
@@ -132,7 +132,7 @@ class Datagen(tf.keras.utils.Sequence):
         - A normalized and augmented image.
         """
         image = cv2.imread(tile)
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        image = image[:, :, ::-1].copy()
 
         # CHECK IF THIS IS REMOVED!!
 
@@ -162,14 +162,15 @@ class Datagen(tf.keras.utils.Sequence):
         - A tuple containing a batch of image data and a batch of outcome labels.
         """
         indexes = self.indexes[idx*self.batch_size:(idx+1)*self.batch_size]
-
+        to_process = [self.tile_list[k] for k in indexes]
+        to_process = np.unique(to_process)
         # normalization removed, still necessary?
-        # with ThreadPoolExecutor(max_workers=32) as executor:
-        #     X = list(executor.map(lambda tile: self._process_image(tile), [self.tile_list[k] for k in indexes]))
+        with ThreadPoolExecutor() as executor:
+            X_img = np.array(list(executor.map(lambda tile: self._process_image(tile), to_process)))
 
-        X_img = np.array([self._process_image(self.tile_list[k]) for k in indexes])
+        # X_img = np.array([self._process_image(self.tile_list[k]) for k in indexes])
         
-        batch_ids = [extract_identifier(os.path.basename(self.tile_list[k])) for k in indexes]
+        batch_ids = [extract_identifier(os.path.basename(file)) for file in to_process]
         X_clin = np.array(self.df.loc[batch_ids][['LVI', 'RTI', 'Size']])
         event = np.array(self.df.loc[batch_ids]['Event'])
         time = np.array(self.df.loc[batch_ids]['Time'])

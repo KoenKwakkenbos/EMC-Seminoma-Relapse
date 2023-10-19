@@ -6,6 +6,7 @@ import torch.optim as optim
 from torch.cuda.amp import autocast, GradScaler
 import torch.nn.functional as F
 from sklearn.metrics import accuracy_score, balanced_accuracy_score, f1_score, precision_score, recall_score, roc_curve, auc, confusion_matrix
+from sklearn.model_selection import train_test_split
 import numpy as np
 from torchvision.models import densenet121, vgg11
 import wandb
@@ -23,23 +24,66 @@ from collections import defaultdict
 import multiprocessing
 import time
 import sys
+import config
+
 if __name__ == "__main__":
     if sys.platform.startswith('win'):
         multiprocessing.set_start_method('spawn')
+
+# Addition KK:
+def extract_identifier(filename):
+    # Attempt extraction using both hyphen and underscore separators
+    separators = ['-', '_']
+    for separator in separators:
+        parts = filename.split(separator)
+        if len(parts) >= 3:
+            identifier = separator.join(parts[:3])
+            return identifier
+    return None
 #%%
 class CustomImageDataset(Dataset):
-    def __init__(self, root_dir, xlsx_path, transform=None):
+    def __init__(self, root_dir, df_labels, train=False, transform=None):
         self.root_dir = root_dir
         self.transform = transform
-        self.df_labels = pd.read_excel(xlsx_path)
+        self.df_labels = df_labels
+        self.df_labels.index = self.df_labels.index.map(extract_identifier)
+        self.train = train
         
         # Precompute the list of all image paths
         self.all_images = [os.path.join(subdir, file) 
                            for subdir, dirs, files in os.walk(self.root_dir) 
-                           for file in files if file.lower().endswith(('.png', '.jpg', '.jpeg'))]
+                           for file in files if file.lower().endswith(('.png', '.jpg', '.jpeg'))
+    	                   and extract_identifier(file) in self.df_labels.index]
+        
+        if self.train:
+            # Perform oversampling
 
+            labels = self.df_labels.loc[[extract_identifier(os.path.basename(file)) for file in self.all_images]]['Event'].to_list()
+            class_counts = {label: labels.count(label) for label in set(labels)}
+            print(f"Training --> oversampling. Class distribution before oversampling: {class_counts}")
+
+            majority_class = 0
+            minority_class = 1
+
+            num_oversample_majority = int(class_counts[majority_class] * 0.20)
+            num_oversample_minority = num_oversample_majority + (class_counts[majority_class] - class_counts[minority_class])
+
+            majority_images = [img for img, label in zip(self.all_images, labels) if label == majority_class]
+            minority_images = [img for img, label in zip(self.all_images, labels) if label == minority_class]
+
+            oversampled_majority = np.random.choice(majority_images, num_oversample_majority, replace=True)
+            oversampled_minority = np.random.choice(minority_images, num_oversample_minority, replace=True)
+
+            self.all_images.extend(oversampled_majority.tolist())
+            self.all_images.extend(oversampled_minority.tolist())
+
+            class_counts[majority_class] += num_oversample_majority
+            class_counts[minority_class] += num_oversample_minority
+            print(f"Class distribution after oversampling: {class_counts}")
+
+        # print(self.all_images[:5])
         # Debug: Print the first few image paths
-        #print(self.all_images[:5])
+        print(self.all_images[:5])
 
     def __len__(self):
         return len(self.all_images)
@@ -48,19 +92,20 @@ class CustomImageDataset(Dataset):
         img_name = self.all_images[idx]
         
         # Extract study_id from image name
-        segments = img_name.split('_')
-        if len(segments) <= 1:
-            raise ValueError(f"Unexpected image name format for {img_name}")
+        # segments = img_name.split('_')
+        # if len(segments) <= 1:
+        #     raise ValueError(f"Unexpected image name format for {img_name}")
         
-        study_id = segments[1]
+        study_id = extract_identifier(os.path.basename(img_name))
         
         # Debug: Print the extracted study_id
-        #print(f"Extracted study_id: {study_id}")
+        # print(f"Extracted study_id: {study_id}")
     
         # Get label from Excel
         # Changed this (KK)
-        label_entries = self.df_labels[self.df_labels['ID'].str.contains(study_id)]['Event'].values
-        
+        clin_data = self.df_labels.loc[study_id][['LVI', 'RTI', 'Size']].to_numpy()
+        label_entries = [self.df_labels.loc[study_id]['Event']]
+
         # Debug: Print the label entries from the DataFrame
         #print(f"Label entries for study_id {study_id}: {label_entries}")
         
@@ -75,20 +120,36 @@ class CustomImageDataset(Dataset):
         if self.transform:
             image = self.transform(image)
             
-        return image, label, study_id
+        return image, clin_data, label, study_id
 
 
-root_dir = r"./tiles-normalized"
-xlsx_path = r"W:\Cohort_EMC\Cohort_EMC.xlsx"
+root_dir = "/data/scratch/kkwakkenbos/Tiles_512_10x_normalized"
+xlsx_path = "/data/scratch/kkwakkenbos/Cohort_EMC.xlsx"
 transform = transforms.Compose([transforms.ToTensor()])
 
+patient_data = pd.read_excel(xlsx_path, engine='openpyxl').set_index('ID').dropna()
+
+if not config.cohort_settings['synchronous']:
+    patient_data = patient_data.drop(patient_data[patient_data['Synchronous'] == 1].index)
+if not config.cohort_settings['treatment']:
+    patient_data = patient_data.drop(patient_data[patient_data['Treatment'] == 1].index)
+
+print(patient_data.head(10))
+
+train_index, val_index, _, _ = train_test_split(
+    patient_data.index, patient_data['Event'], stratify=patient_data['Event'], test_size=0.2, random_state=0)
+
+
+patient_data_train = patient_data.loc[train_index].copy()
+patient_data_val = patient_data.loc[val_index].copy()
+
 # Create datasets using CustomImageDataset
-train_dataset = CustomImageDataset(os.path.join(root_dir, 'Training', 'Oversampled'), xlsx_path, transform=transform)
-val_dataset = CustomImageDataset(os.path.join(root_dir, 'Validation'), xlsx_path, transform=transform)
+train_dataset = CustomImageDataset(os.path.join(root_dir), patient_data_train, train=True, transform=transform)
+val_dataset = CustomImageDataset(os.path.join(root_dir), patient_data_val, train=False, transform=transform)
 
 def get_class_counts(dataset):
     class_counts = defaultdict(int)
-    for idx, (img, label, _) in enumerate(dataset):  # Notice the added underscore
+    for idx, (img, _, label, _) in enumerate(dataset):  # Notice the added underscore
         try:
             class_counts[label] += 1
             if idx == len(dataset) - 1: 
@@ -163,6 +224,7 @@ def log_metrics(metrics, split, prefix, loss):
 class CustomHead(nn.Module):
     def __init__(self, input_size, output_size, batch_norm, dropout_rate):
         super(CustomHead, self).__init__()
+        # clinical features, fix later
         self.fc = nn.Linear(input_size, output_size)
         
         # Conditionally create the BatchNorm1d layer
@@ -171,6 +233,8 @@ class CustomHead(nn.Module):
         self.dropout = nn.Dropout(dropout_rate)
 
     def forward(self, x):
+        # x = torch.cat((x[0], clinical_input), dim=1)
+
         if self.batch_norm:
             x = self.batch_norm(x)
         
@@ -223,7 +287,7 @@ def train(model, train_data_loader, optimizer, scheduler, device, scaler):
     
     start_time = time.time()  # Capturing start time
     
-    for i, (images, labels, study_ids) in enumerate(train_data_loader):
+    for i, (images, clin_vars, labels, study_ids) in enumerate(train_data_loader):
        # print(f"Debug: Batch {i}...")
         images, labels = images.to(device), labels.to(device)
         with autocast():
@@ -281,7 +345,7 @@ def validate(model, val_data_loader, device):
     val_start_time = time.time()
 
     with torch.no_grad():
-        for images, labels, study_ids in val_data_loader:
+        for images, _, labels, study_ids in val_data_loader:
             images, labels = images.to(device), labels.to(device)
             with autocast():
                 outputs = model(images)  # changed this line
@@ -324,7 +388,7 @@ def predict(model, data_loader):
     study_summary = {}
     y_proba = []
     with torch.no_grad():
-        for i, (inputs, labels, study_ids) in enumerate(data_loader):
+        for i, (inputs, _, labels, study_ids) in enumerate(data_loader):
             inputs = inputs.to(device)
             outputs = model(inputs)
             
@@ -348,9 +412,9 @@ def predict(model, data_loader):
         patient_probabilities = []
         patient_labels = []
         for study_id in study_summary:
-            patient_predictions.append(stats.mode(study_summary[study_id]['predictions'], keepdims=True)[0][0])
+            patient_predictions.append(stats.mode(study_summary[study_id]['predictions'])[0][0])
             patient_probabilities.append(np.mean(study_summary[study_id]['probs']))
-            patient_labels.append(stats.mode(study_summary[study_id]['labels'], keepdims=True)[0][0])
+            patient_labels.append(stats.mode(study_summary[study_id]['labels'])[0][0])
         return batch_predictions, batch_labels, patient_predictions, patient_labels, y_proba, patient_probabilities
 
 if not os.path.exists('Best models'):
