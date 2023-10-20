@@ -8,7 +8,7 @@ import tensorflow.keras.backend as K
 import wandb
 
 from models import *
-import config
+import config_resnet_10 as config
 from pathlib import Path
 from survival_model import CoxPHLoss, CindexMetric
 from tqdm import tqdm
@@ -167,7 +167,7 @@ for i, (train_index, val_index) in enumerate(skf.split(patient_data.index, patie
     # Start a run, tracking hyperparameters
     wandb.init(
         # set the wandb project where this run will be logged
-        project="local-debugging",
+        project="ResNet50_Fully_Supervised_Survival",
 
         # track hyperparameters and run metadata with wandb.config
         config={
@@ -193,22 +193,23 @@ for i, (train_index, val_index) in enumerate(skf.split(patient_data.index, patie
     train_gen = Datagen(patient_data_train,
                         config.model_settings['tile_size'], 
                         config.cohort_settings['data_path'], 
-                        batch_size=32, 
+                        batch_size=config.train_settings['batch_size'], 
                         train=True, 
                         imagenet=True)
 
     val_gen = Datagen(patient_data_val,
                     config.model_settings['tile_size'], 
                     config.cohort_settings['data_path'],
-                    batch_size=32, 
+                    batch_size=config.train_settings['batch_size'], 
                     train=False, 
                     imagenet=True)
 
     model = create_imagenet_model(input_shape=(config.model_settings['tile_size'], config.model_settings['tile_size'], 3), trainable=False)
+    print(model.summary())
 
     trainer = TrainAndEvaluateModel(
         model=model,
-        model_dir=Path("surv_model_first_try"),
+        model_dir=Path(f"ResNet50_FSS_10_fold_{i+1}"),
         train_dataset=train_gen,
         eval_dataset=val_gen,
         learning_rate=config.train_settings['learning_rate'],

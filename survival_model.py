@@ -93,9 +93,14 @@ class CoxPHLoss(tf.keras.losses.Loss):
                              "equal rank of event (received %s)" % (
                 pred_shape.ndims, event.shape.ndims))
 
-        if riskset.shape.ndims != 2:
-            raise ValueError("Rank mismatch: Rank of riskset (received %s) should "
-                             "be 2." % riskset.shape.ndims)
+        try:
+            if riskset.shape.ndims != 2:
+                raise ValueError("Rank mismatch: Rank of riskset (received %s) should "
+                                "be 2." % riskset.shape.ndims)
+        except:
+            if riskset.ndim != 2:
+                raise ValueError("Rank mismatch: Rank of riskset (received %s) should "
+                    "be 2." % riskset.shape.ndims)
 
         event = tf.cast(event, predictions.dtype)
         predictions = safe_normalize(predictions)

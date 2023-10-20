@@ -3,7 +3,7 @@ cohort_settings = {
     'cohort_file': 'W:/train_val_cohort.xlsx',
     'synchronous': 0,
     'treatment': 0,
-    'magnification': 20
+    'magnification': 10
 }
 
 model_settings = {
