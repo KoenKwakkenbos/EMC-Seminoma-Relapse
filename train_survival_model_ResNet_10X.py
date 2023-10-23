@@ -189,8 +189,6 @@ for i, (train_index, val_index) in enumerate(skf.split(patient_data.index, patie
     patient_data_train = patient_data.iloc[train_index].copy()
     patient_data_val = patient_data.iloc[val_index].copy()
 
-    clinical_vars = ['RTI', 'LVI', 'Size']
-
     train_gen = Datagen(patient_data_train,
                         config.model_settings['tile_size'], 
                         config.cohort_settings['data_path'], 

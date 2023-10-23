@@ -11,7 +11,8 @@ model_settings = {
         "optimizer": "Adam",
         "loss": "CPHloss",
         "metric": "CIndex",
-        "tile_size": 512
+        "tile_size": 512,
+        "clinical_vars": ['RTI', 'LVI', 'Size'],
 }
 
 train_settings = {

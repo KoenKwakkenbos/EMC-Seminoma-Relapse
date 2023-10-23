@@ -27,7 +27,7 @@ def extract_identifier(filename):
     return None
 
 
-def train_val_split(tile_list, df_train, df_val):
+def train_val_split(tile_list, df_train, df_val, clinical_vars):
     tile_list_train = [file for file in tile_list
                        if extract_identifier(os.path.basename(file)) in df_train.index]
     tile_list_val = [file for file in tile_list
@@ -58,12 +58,12 @@ def train_val_split(tile_list, df_train, df_val):
     print(f"Class distribution after oversampling: {class_counts}")
 
     train_ids = [extract_identifier(os.path.basename(file)) for file in tile_list_train]
-    clin_train = np.array(df_train.loc[train_ids][['LVI', 'RTI', 'Size']], dtype=np.float32)
+    clin_train = np.array(df_train.loc[train_ids][clinical_vars], dtype=np.float32)
     event_train = np.array(df_train.loc[train_ids]['Event'], dtype=np.int32)
     time_train = np.array(df_train.loc[train_ids]['Time'], dtype=np.float32)
 
     val_ids = [extract_identifier(os.path.basename(file)) for file in tile_list_val]
-    clin_val = np.array(df_val.loc[val_ids][['LVI', 'RTI', 'Size']], dtype=np.float32)
+    clin_val = np.array(df_val.loc[val_ids][clinical_vars], dtype=np.float32)
     event_val = np.array(df_val.loc[val_ids]['Event'], dtype=np.int32)
     time_val = np.array(df_val.loc[val_ids]['Time'], dtype=np.float32)
 
@@ -246,10 +246,7 @@ for i, (train_index, val_index) in enumerate(skf.split(patient_data.index, patie
                  for subdir, dirs, files in os.walk(config.cohort_settings['data_path'])
                  for file in files if file.lower().endswith(('.png', '.jpg'))]
 
-    tiles_train, labels_train, tiles_val, labels_val = train_val_split(tile_list, patient_data_train, patient_data_val)
-
-    print(len(tiles_train))
-    print(len(tiles_val))
+    tiles_train, labels_train, tiles_val, labels_val = train_val_split(tile_list, patient_data_train, patient_data_val, config.model_settings['clinical_vars'])
 
     train_gen = get_datagenerator(tiles_train, labels_train[0], labels_train[1], labels_train[2], config.train_settings['batch_size'], train=True, imagenet=True)
     val_gen = get_datagenerator(tiles_val, labels_val[0], labels_val[1], labels_val[2], config.train_settings['batch_size'], train=False, imagenet=True)
