@@ -24,6 +24,11 @@ import tensorflow.keras.backend as K
 
 from models import create_classification_model
 from helpers import tar_path, dir_path
+import config
+
+# CHECK DISTRIBUTED TRAINING!!
+
+
 
 def parse_arguments():
     """
@@ -43,41 +48,6 @@ def parse_arguments():
 
     return parser.parse_args()
 
-
-def dir_path(path):
-    """
-    Check if a path is a directory.
-
-    Parameters:
-    - path (str): The path to check.
-
-    Returns:
-    - str: The validated path if it is a directory.
-
-    Raises:
-        NotADirectoryError: If the path is not a directory.
-    """
-    if os.path.isdir(path):
-        return path
-    raise NotADirectoryError(path)
-
-
-def tar_path(path):
-    """
-    Check if a path is a directory. If it is not, create the directory and return the path.
-
-    Parameters:
-    - path (str): The path to check.
-
-    Returns:
-    - str: The validated path as a directory.
-
-    """
-    if not os.path.isdir(path):
-        os.makedirs(path)
-        print(f"Output folder {path} created")
-        return path
-    return path
 
 def compute_class_weights(labels):
     labels = np.array(labels)
@@ -144,12 +114,20 @@ def main():
     # Get input from commandline
     parsed_args = parse_arguments()
 
-    patient_data = pd.read_csv('./Seminoma_Outcomes_Anon.csv', header=0).set_index('AnonPID')
-    
-    skf = StratifiedKFold(n_splits=3)
-    skf.get_n_splits(patient_data.index, patient_data['Meta'])
+    # patient_data = pd.read_csv('./Seminoma_Outcomes_Anon.csv', header=0).set_index('AnonPID')
+    patient_data = pd.read_excel(config.cohort_settings['cohort_file'], header=0, engine="openpyxl").set_index('ID')
 
-    for i, (train_index, test_index) in enumerate(skf.split(patient_data.index, patient_data['Meta'])):
+    if not config.cohort_settings['synchronous']:
+        patient_data = patient_data.drop(patient_data[patient_data['Synchronous'] == 1].index)
+    if not config.cohort_settings['treatment']:
+        patient_data = patient_data.drop(patient_data[patient_data['Treatment'] == 1].index)
+
+    print(patient_data.head(10))
+
+    skf = StratifiedKFold(n_splits=3)
+    skf.get_n_splits(patient_data.index, patient_data['Event'])
+
+    for i, (train_index, test_index) in enumerate(skf.split(patient_data.index, patient_data['Event'])):
         K.clear_session()
         print(f"Fold {i}:")
         print(f"  Train: index={train_index}")
@@ -157,10 +135,10 @@ def main():
 
         print(patient_data.iloc[train_index])
 
-        train_gen = Datagen(list(patient_data.iloc[train_index].index), patient_data['Meta'].iloc[train_index], 224, parsed_args.input, batch_size=32, train=True, imagenet=True)
-        val_gen = Datagen(list(patient_data.iloc[test_index].index), patient_data['Meta'].iloc[test_index], 224, parsed_args.input, batch_size=32, train=False, imagenet=True)
+        train_gen = Datagen(list(patient_data.iloc[train_index].index), patient_data['Event'].iloc[train_index], 224, parsed_args.input, batch_size=32, train=True, imagenet=True)
+        val_gen = Datagen(list(patient_data.iloc[test_index].index), patient_data['Event'].iloc[test_index], 224, parsed_args.input, batch_size=32, train=False, imagenet=True)
 
-        train_weights = compute_class_weights(patient_data['Meta'].iloc[train_index])
+        train_weights = compute_class_weights(patient_data['Event'].iloc[train_index])
 
         model = train(train_gen, val_gen, train_weights, parsed_args.output, i)
 

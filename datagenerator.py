@@ -17,6 +17,7 @@ Date: Feb 2022
 """
 
 import os
+import glob
 import random
 import tensorflow as tf
 import numpy as np
@@ -43,9 +44,10 @@ class Datagen(tf.keras.utils.Sequence):
     - imagenet (bool, optional): Whether to preprocess images for use with pre-trained Imagenet
       models. Default is False.
     """
-    def __init__(self, slide_list, outcome_list, tile_size, tile_path, batch_size=32, train=False, imagenet=False):
+    def __init__(self, slide_list, outcome_list, clinical_vars, tile_size, tile_path, batch_size=32, train=False, imagenet=False):
         self.slide_list = slide_list
         self.pat_outcome_list = outcome_list
+        self.pat_clinical_vars = clinical_vars
         self.tile_size = tile_size
         self.tile_path = tile_path
         self.batch_size = batch_size
@@ -53,14 +55,30 @@ class Datagen(tf.keras.utils.Sequence):
         self.imagenet = imagenet
         self.tile_list = []
         self.tile_outcome_list = []
+        self.tile_clinical_list = []
+        self.minority_class_label = 1
+        # for patient in self.slide_list:
+        #     for root, _, files in os.walk(os.path.join(tile_path, str(patient))):
+        #         for file in files:
+        #             self.tile_list.append(os.path.join(root, file))
+        #             self.tile_outcome_list.append(self.pat_outcome_list[patient])
 
         for patient in self.slide_list:
-            for root, _, files in os.walk(os.path.join(tile_path, str(patient))):
-                for file in files:
-                    self.tile_list.append(os.path.join(root, file))
+            for file in glob.glob(f'{self.tile_path}/**/{patient}*.png'):
+                    self.tile_list.append(file)
                     self.tile_outcome_list.append(self.pat_outcome_list[patient])
+                    self.tile_clinical_list.append(self.pat_clinical_vars.loc[patient])
+    
+        # Oversampling
+        # if self.train:
+        #     minority_class = np.where(np.array(self.tile_outcome_list) == self.minority_class_label)[0]
 
+        #     self.tile_list.extend([self.tile_list[i] for i in minority_class])
+        #     self.tile_outcome_list.extend([self.tile_outcome_list[i] for i in minority_class])
+        #     self.tile_outcome_list.extend([self.tile_outcome_list[i] for i in minority_class])
+    
         self.on_epoch_end()
+
 
     def __len__(self):
         """
@@ -81,13 +99,20 @@ class Datagen(tf.keras.utils.Sequence):
         """
         image = cv2.imread(tile)
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        image_norm = self._normalize_image(image)
-        #image_norm = image / 255.
+
+        # CHECK IF THIS IS REMOVED!!
+
+        # image_norm = self._normalize_image(image)
+
+        # ----------------------------------------
 
         if self.train:
-            image_norm = self._augment_image(image_norm)
-
+            image = self._augment_image(image)
+        
+        image_norm = image / 255.
+        
         return image_norm
+
 
     def __getitem__(self, idx):
         """
@@ -101,10 +126,11 @@ class Datagen(tf.keras.utils.Sequence):
         """
         indexes = self.indexes[idx*self.batch_size:(idx+1)*self.batch_size]
 
-        with ThreadPoolExecutor(max_workers=32) as executor:
-            X = list(executor.map(lambda tile: self._process_image(tile), [self.tile_list[k] for k in indexes]))
+        # normalization removed, still necessary?
+        # with ThreadPoolExecutor(max_workers=32) as executor:
+        #     X = list(executor.map(lambda tile: self._process_image(tile), [self.tile_list[k] for k in indexes]))
 
-        X = np.array(X)
+        X = np.array([self._process_image(self.tile_list[k]) for k in indexes])
         y = np.array([self.tile_outcome_list[k] for k in indexes])
 
         return X, y
@@ -190,6 +216,7 @@ class Datagen(tf.keras.utils.Sequence):
 
         return Inorm
 
+
     def _augment_image(self, img):
         """
         Applies random transformations to an image.
@@ -204,11 +231,15 @@ class Datagen(tf.keras.utils.Sequence):
             rot = random.choice([cv2.ROTATE_90_CLOCKWISE, cv2.ROTATE_180, cv2.ROTATE_90_COUNTERCLOCKWISE])
             img = cv2.rotate(img, rot)
 
-        if random.random() < 0.5:
+        if random.random() < 0.75:
             flip = random.choice([-1, 0, 1])
             img = cv2.flip(img, flip)
 
+        if random.random() < 75:
+            img = cv2.convertScaleAbs(img, alpha=random.uniform(0.8, 1.2), beta=random.uniform(0.8, 1.2))
+
         return img
+
 
     def on_epoch_end(self):
         """
@@ -246,6 +277,7 @@ class AEDatagen(Datagen):
 
         return X, X
 
+
 class MILdatagen(Datagen):
     """
     A generator class that yields batches of preprocessed image data and corresponding outcome labels.
@@ -280,6 +312,7 @@ class MILdatagen(Datagen):
 
         self.on_epoch_end()
 
+
     def topk_dataset(self, idx):
         """
         Set the indexes to be used for the next batch.
@@ -290,6 +323,7 @@ class MILdatagen(Datagen):
         self.indexes = np.array(idx)
         if self.train:
             np.random.shuffle(self.indexes)
+
 
     def on_epoch_end(self):
         """

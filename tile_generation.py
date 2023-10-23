@@ -18,6 +18,7 @@ Date: Feb 2022
 import os
 import argparse
 import json
+import random
 from concurrent.futures import ThreadPoolExecutor
 from itertools import product
 import numpy as np
@@ -29,7 +30,7 @@ from helpers import dir_path, tar_path
 
 # Add openslide.
 # ! ADD THIS PATH MANUALLY
-OPENSLIDE_PATH = r'.../openslide-win64/bin'
+OPENSLIDE_PATH = r'C:\Users\093637\Documents\EMC-Seminoma-Relapse\openslide-win64\bin'
 if hasattr(os, 'add_dll_directory'):
     # Python >= 3.8 on Windows
     with os.add_dll_directory(OPENSLIDE_PATH):
@@ -53,7 +54,10 @@ def parse_arguments():
     parser.add_argument('-o', '--output', type=tar_path, nargs="?", const=1,
                         help="Path to output folder.",
                         required=True)
-    parser.add_argument('-s', '--tilesize', type=int, nargs="?", const=1,
+    parser.add_argument('-s', '--source', type=str, choices=["EMC", "TCGA"], nargs="?", const=1,
+                        help="Data source.",
+                        required=True)
+    parser.add_argument('-ts', '--tilesize', type=int, nargs="?", const=1,
                         default=224,
                         help="Size (px) of the square tiles to be extracted.")
     parser.add_argument('-m', '--magnification', type=int, nargs="?", const=1,
@@ -115,21 +119,39 @@ def tile_slide(annotation_path, tile_size, downsample):
         bbox[1] + new_height - height_diff // 2
     )
 
-    # get x and y gridpoints the tiles should be generated on
-    x_range = np.arange(bbox_scaled[0], bbox_scaled[2], tile_size[0] * downsample)
-    y_range = np.arange(bbox_scaled[1], bbox_scaled[3], tile_size[1] * downsample)
+    # Calculate the overlap size based on the original tile size
+    overlap_size = (int(tile_size[0] * 0.2), int(tile_size[1] * 0.2))
 
+    # Adjust the tile size to account for overlap
+    adjusted_tile_size = (tile_size[0] - overlap_size[0], tile_size[1] - overlap_size[1])
+
+    # get x and y gridpoints the tiles should be generated on
+    x_range = np.arange(bbox_scaled[0], bbox_scaled[2] - adjusted_tile_size[0] * downsample, 
+                        adjusted_tile_size[0] * downsample)
+    y_range = np.arange(bbox_scaled[1], bbox_scaled[3] - adjusted_tile_size[1] * downsample, 
+                        adjusted_tile_size[1] * downsample)
     # check the overlapping between the tile and the annotation polygons, discard tiles that
     # do not intersect with the annotations
-    tile_coordinates = [(int(x), int(y)) for x, y in product(x_range, y_range)
-                        if any(poly.intersects(box(x, y, x + tile_size[0] * downsample, y + tile_size[1] * downsample))
-                        for poly in annotation_polys)]
+    
+    tile_coordinates = []
+    
+    for x, y in product(x_range, y_range):
+        tile_box = box(x, y, x + (tile_size[0] * downsample), y + (tile_size[1] * downsample))
+        for poly in annotation_polys:
+            if poly.intersects(tile_box):
+                if poly.intersection(tile_box).area / tile_box.area > 0.5:
+                    tile_coordinates.append((int(x), int(y)))
+            
+    # REMOVE THIS!!!
+    # tile_coordinates = random.choices(tile_coordinates, k=5)
+    # --------------
+
     count = len(tile_coordinates)
 
     return tile_coordinates, count
 
 
-def process_and_save_tile(slide, coord, tile_size, output_path):
+def process_and_save_tile(slide, coord, tile_size, downsample, output_path):
     """
     Given a slide image, the coordinates of a tile in the slide image, the size of the tile,
     and the output directory, extracts the tile, processes it, and saves it as a PNG file if
@@ -145,22 +167,41 @@ def process_and_save_tile(slide, coord, tile_size, output_path):
     Returns:
     - None
     """
-    offset_x = int(slide.properties['openslide.bounds-x'])
-    offset_y = int(slide.properties['openslide.bounds-y'])
-    tile = slide.read_region((offset_x + coord[0],offset_y + coord[1]), 2, (tile_size, tile_size))
-    tile = np.asarray(tile)
 
+    try:
+        offset_x = int(slide.properties['openslide.bounds-x'])
+        offset_y = int(slide.properties['openslide.bounds-y'])
+    except KeyError:
+        offset_x = offset_y = 0
+    
+    level = int(np.log2(downsample))
+    
+    # If the pyramid is stored as 1, 2, 4, 8 etc.:
+    if level == int(slide.get_best_level_for_downsample(downsample)):
+        tile = slide.read_region((offset_x + coord[0], offset_y + coord[1]), level, (tile_size, tile_size))
+        tile = np.asarray(tile)
+    else:
+        level = 0
+        tile_size_fullres = tile_size * downsample
+
+        tile = slide.read_region((offset_x + coord[0], offset_y + coord[1]), level, (tile_size_fullres, tile_size_fullres))
+        tile = tile.resize((tile_size, tile_size))
+
+    tile_array = np.array(tile)
     # Convert to grayscale for threshold calculations.
-    gray_tile = cv2.cvtColor(tile, cv2.COLOR_BGRA2GRAY)
+    gray_tile = cv2.cvtColor(tile_array, cv2.COLOR_BGRA2GRAY)
 
-    _, threshold_tile = cv2.threshold(gray_tile, 240, 255, cv2.THRESH_BINARY_INV)
+    # _, threshold_tile = cv2.threshold(gray_tile, 240, 255, cv2.THRESH_BINARY_INV)
 
-    tissue_pixels = np.count_nonzero(threshold_tile)
-    tissue_percentage = tissue_pixels / (threshold_tile.shape[0] * threshold_tile.shape[1]) * 100
+    # tissue_pixels = np.count_nonzero(threshold_tile)
+    # tissue_percentage = tissue_pixels / (threshold_tile.shape[0] * threshold_tile.shape[1]) * 100
+    	
+    tissue_pixels = np.count_nonzero(gray_tile < 225)
+    tissue_percentage = (tissue_pixels / (gray_tile.shape[0] * gray_tile.shape[1])) * 100
 
     if tissue_percentage > 80:
-        cv2.imwrite(os.path.join(output_path, f"{coord[0]}_{coord[1]}.png"),
-                    cv2.cvtColor(tile, cv2.COLOR_RGBA2BGRA))
+        cv2.imwrite(os.path.join(output_path, f"{os.path.basename(output_path)}_{coord[0]}_{coord[1]}.png"),
+                    cv2.cvtColor(tile_array, cv2.COLOR_RGBA2BGRA))
 
 
 def main():
@@ -170,24 +211,40 @@ def main():
     base_dir = parsed_args.input
 
     image_annotation_paths = []
-    for dirpath, _, filenames in os.walk(os.path.abspath(os.path.join(base_dir, 'Converted and anonymized'))):
+
+    images_dir = os.path.abspath(os.path.join(base_dir, 'Images'))
+    annotations_dir = os.path.abspath(os.path.join(base_dir, 'Annotations'))
+
+    extension = '.mrxs' if parsed_args.source == "EMC" else '.svs'
+
+    for dirpath, _, filenames in os.walk(images_dir):
         for filename in filenames:
-            if filename.endswith('.mrxs'):
+            if filename.endswith(extension):
                 image_path = os.path.join(dirpath, filename)
-                annotation_path = os.path.abspath(os.path.join(base_dir, 'Annotations', os.path.relpath(dirpath, os.path.abspath(os.path.join(base_dir, 'Converted and anonymized'))), filename.replace('.mrxs', '.geojson')))
+                annotation_filename = filename.replace(extension, '.geojson')
+                annotation_path = os.path.join(annotations_dir, os.path.relpath(dirpath, images_dir), annotation_filename)
+
                 if os.path.exists(annotation_path):
                     image_annotation_paths.append((image_path, annotation_path))
-
+    
     tile_size = (parsed_args.tilesize, parsed_args.tilesize)
 
     for slide_path, annotation_path in image_annotation_paths:
-        output_path = os.path.join(parsed_args.output, os.path.basename(slide_path).replace('.mrxs', ''))
+        output_path = os.path.join(parsed_args.output, os.path.basename(slide_path).replace(extension, ''))
         print(output_path)
+        if os.path.isdir(output_path):
+            print('Folder already exists, skipping')
+            continue
 
         slide = openslide.open_slide(slide_path)
 
         objective_power = slide.properties['openslide.objective-power']
-        downsample = 2 * int(int(objective_power) / parsed_args.magnification)
+
+        downsample = int(int(objective_power) / parsed_args.magnification)
+        if parsed_args.source == "EMC":
+            downsample = 2 * downsample
+
+        print(downsample)
 
         tiles_coords, num_tiles = tile_slide(annotation_path, tile_size, downsample)
 
@@ -197,7 +254,7 @@ def main():
 
         # Multithreading is used to accelerate writing the extraction and saving of tiles.
         with ThreadPoolExecutor() as executor:
-            list(tqdm(executor.map(lambda coord: process_and_save_tile(slide, coord, tile_size[0], output_path),
+            list(tqdm(executor.map(lambda coord: process_and_save_tile(slide, coord, tile_size[0], downsample, output_path),
                                    tiles_coords)))
 
         print('----' * 8)

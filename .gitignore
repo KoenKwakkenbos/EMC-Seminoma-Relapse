@@ -142,3 +142,9 @@ output*
 *.h5
 *.html
 *.jpg
+wandb/
+Test/
+old_code_files/
+ckpts-mnist-cnn/
+models/
+.vscode
