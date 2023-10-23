@@ -2,7 +2,7 @@ import os
 import pandas as pd
 import tensorflow as tf
 from tensorflow import keras
-from datagenerator_survival import Datagen
+from tf_dataset import get_datagenerator
 from sklearn.model_selection import train_test_split, StratifiedKFold
 import tensorflow.keras.backend as K
 import wandb
@@ -12,8 +12,63 @@ import config_resnet_10 as config
 from pathlib import Path
 from survival_model import CoxPHLoss, CindexMetric
 from tqdm import tqdm
+import numpy as np
 
 print('starting')
+
+
+def extract_identifier(filename):
+    # Attempt extraction using both hyphen and underscore separators
+    separators = ['-', '_']
+    for separator in separators:
+        parts = filename.split(separator)
+        if len(parts) >= 3:
+            identifier = separator.join(parts[:3])
+            return identifier
+    return None
+
+
+def train_val_split(tile_list, df_train, df_val):
+    tile_list_train = [file for file in tile_list
+                       if extract_identifier(os.path.basename(file)) in df_train.index]
+    tile_list_val = [file for file in tile_list
+                     if extract_identifier(os.path.basename(file)) in df_val.index]
+    
+    # Perform oversampling
+    labels = df_train.loc[[extract_identifier(os.path.basename(file)) for file in tile_list_train]]['Event'].to_list()
+    class_counts = {label: labels.count(label) for label in set(labels)}
+    print(f"Training --> oversampling. Class distribution before oversampling: {class_counts}")
+
+    majority_class = 0
+    minority_class = 1
+
+    num_oversample_majority = int(class_counts[majority_class] * 0.20)
+    num_oversample_minority = num_oversample_majority + (class_counts[majority_class] - class_counts[minority_class])
+
+    majority_images = [img for img, label in zip(tile_list_train, labels) if label == majority_class]
+    minority_images = [img for img, label in zip(tile_list_train, labels) if label == minority_class]
+
+    oversampled_majority = np.random.choice(majority_images, num_oversample_majority, replace=True)
+    oversampled_minority = np.random.choice(minority_images, num_oversample_minority, replace=True)
+
+    tile_list_train.extend(oversampled_majority.tolist())
+    tile_list_train.extend(oversampled_minority.tolist())
+
+    class_counts[majority_class] += num_oversample_majority
+    class_counts[minority_class] += num_oversample_minority
+    print(f"Class distribution after oversampling: {class_counts}")
+
+    train_ids = [extract_identifier(os.path.basename(file)) for file in tile_list_train]
+    clin_train = np.array(df_train.loc[train_ids][['LVI', 'RTI', 'Size']], dtype=np.float32)
+    event_train = np.array(df_train.loc[train_ids]['Event'], dtype=np.int32)
+    time_train = np.array(df_train.loc[train_ids]['Time'], dtype=np.float32)
+
+    val_ids = [extract_identifier(os.path.basename(file)) for file in tile_list_val]
+    clin_val = np.array(df_val.loc[val_ids][['LVI', 'RTI', 'Size']], dtype=np.float32)
+    event_val = np.array(df_val.loc[val_ids]['Event'], dtype=np.int32)
+    time_val = np.array(df_val.loc[val_ids]['Time'], dtype=np.float32)
+
+    return tile_list_train, (clin_train, event_train, time_train), tile_list_val, (clin_val, event_val, time_val)
 
 
 class TrainAndEvaluateModel:
@@ -73,9 +128,8 @@ class TrainAndEvaluateModel:
             self.log_metrics([val_cindex['cindex']], 'val', 'img', val_loss)
 
             # Datagenerators end of epoch
-            self.train_ds.on_epoch_end()
-            self.val_ds.on_epoch_end()
-
+            # self.train_ds = self.train_ds.shuffle()
+            # self.val_ds = self.val_ds.shuffle(buffer_size=1024)
             save_path = ckpt_manager.save()
             print(f"Saved checkpoint for step {ckpt.step.numpy()}: {save_path}")
 
@@ -147,7 +201,7 @@ class TrainAndEvaluateModel:
         # wandb.log({
         #     f"{prefix}_{split}_loss": loss,
         #     f"{prefix}_{split}_cindex": metrics[0],
-        # })
+        # }
         pass
 
 
@@ -191,19 +245,14 @@ for i, (train_index, val_index) in enumerate(skf.split(patient_data.index, patie
 
     clinical_vars = ['RTI', 'LVI', 'Size']
 
-    train_gen = Datagen(patient_data_train,
-                        config.model_settings['tile_size'], 
-                        config.cohort_settings['data_path'], 
-                        batch_size=config.train_settings['batch_size'], 
-                        train=True, 
-                        imagenet=True)
+    tile_list = [os.path.join(subdir, file) 
+                for subdir, dirs, files in os.walk(config.cohort_settings['data_path'])
+                for file in files if file.lower().endswith(('.png', '.jpg'))]
 
-    val_gen = Datagen(patient_data_val,
-                    config.model_settings['tile_size'], 
-                    config.cohort_settings['data_path'],
-                    batch_size=config.train_settings['batch_size'], 
-                    train=False, 
-                    imagenet=True)
+    tiles_train, labels_train, tiles_val, labels_val = train_val_split(tile_list, patient_data_train, patient_data_val)
+
+    train_gen = get_datagenerator(tiles_train, labels_train[0], labels_train[1], labels_train[2], config.train_settings['batch_size'], True, True)
+    val_gen = get_datagenerator(tiles_val, labels_val[0], labels_val[1], labels_val[2], config.train_settings['batch_size'], True, True)
 
     model = create_imagenet_model(input_shape=(config.model_settings['tile_size'], config.model_settings['tile_size'], 3), trainable=False)
     print(model.summary())
@@ -212,7 +261,7 @@ for i, (train_index, val_index) in enumerate(skf.split(patient_data.index, patie
         model=model,
         model_dir=Path(f"ResNet50_FSS_10_fold_{i+1}"),
         train_dataset=train_gen,
-        eval_dataset=val_gen,
+        eval_dataset=train_gen,
         learning_rate=config.train_settings['learning_rate'],
         num_epochs=config.train_settings['epochs'],
     )
