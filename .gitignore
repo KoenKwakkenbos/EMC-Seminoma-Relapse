@@ -142,3 +142,4 @@ output*
 *.h5
 *.html
 *.jpg
+/wandb/

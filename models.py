@@ -47,6 +47,9 @@ def create_imagenet_model(input_shape=(224, 224, 3), num_clinical_features=3, tr
     concatenated_features = layers.concatenate([x, clinical_input])
     y = layers.BatchNormalization()(concatenated_features)
     y = layers.Dropout(0.2)(y)
+    y = layers.Dense(64, activation='relu')(y)
+    y = layers.Dropout(0.2)(y)
+    y = layers.Dense(32, activation='relu')(y)
     output = layers.Dense(1, activation='linear')(y)
     model = keras.Model(inputs=[image_input, clinical_input], outputs=output)
 
@@ -55,7 +58,7 @@ def create_imagenet_model(input_shape=(224, 224, 3), num_clinical_features=3, tr
     return model
 
 
-def create_cnn_model(input_shape=(512, 512, 3), num_clinical_features=4):
+def create_cnn_model(input_shape=(512, 512, 3), num_clinical_features=3):
     input = layers.Input(shape=input_shape, name='image_input')
     clinical_input = layers.Input(shape=(num_clinical_features,), name='clinical_input')
 

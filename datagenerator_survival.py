@@ -81,7 +81,7 @@ class Datagen(tf.keras.utils.Sequence):
         # Precompute the list of all image paths
         self.tile_list = [os.path.join(subdir, file) 
                          for subdir, dirs, files in os.walk(self.tile_path)
-                         for file in files if file.lower().endswith(('.png', '.jpg'))
+                         for file in files if file.lower().endswith(('.png'))
                          and extract_identifier(file) in self.df.index]
         
         if self.train:
@@ -110,7 +110,7 @@ class Datagen(tf.keras.utils.Sequence):
             class_counts[minority_class] += num_oversample_minority
             print(f"Class distribution after oversampling: {class_counts}")
 
-        # print(self.tile_list[:5])
+        print(self.tile_list[:5])
 
         self.on_epoch_end()
 
@@ -131,13 +131,16 @@ class Datagen(tf.keras.utils.Sequence):
         Returns:
         - A normalized and augmented image.
         """
-        try:
-            image = cv2.imread(tile)
-            image = image[:, :, ::-1].copy()
-        except:
-            print(f'Problem loading {image}')
-            image = np.zeros((self.tile_size, self.tile_size))
+        image = cv2.imread(tile)
+        image = image[:, :, ::-1].copy()
 
+        # CHECK IF THIS IS REMOVED!!
+
+        # image_norm = self._normalize_image(image)
+
+        # ----------------------------------------
+
+        
         if self.train:
             image = self._augment_image(image)
         
@@ -190,19 +193,16 @@ class Datagen(tf.keras.utils.Sequence):
         Returns:
         - The augmented image as a numpy array with the same shape as the input image.
         """
-
-        # Rotation
         if random.random() < 0.75:
             rot = random.choice([cv2.ROTATE_90_CLOCKWISE, cv2.ROTATE_180, cv2.ROTATE_90_COUNTERCLOCKWISE])
             img = cv2.rotate(img, rot)
 
-        # Flipping
         if random.random() < 0.75:
             flip = random.choice([-1, 0, 1])
             img = cv2.flip(img, flip)
 
-        # if random.random() < 75:
-        #     img = cv2.convertScaleAbs(img, alpha=random.uniform(0.8, 1.2), beta=random.uniform(0.8, 1.2))
+        if random.random() < 75:
+            img = cv2.convertScaleAbs(img, alpha=random.uniform(0.8, 1.2), beta=random.uniform(0.8, 1.2))
 
         return img
 
@@ -232,9 +232,19 @@ class DatagenMILSurv(Datagen):
         - idx (list): List of indexes to be used for the next training step (the top indexes).
         """
 
+        # CHECK IF CORRECT:
+        # If shuffeled, we need index of indexes
+
         self.indexes = self.indexes[np.array(idx)]
         if self.train:
             np.random.shuffle(self.indexes)
 
         self.__len__()
 
+    # def on_epoch_end(self):
+    #     """
+    #     Reset the indexes back to the entire dataset for the next inference pass.
+    #     """
+    #     self.indexes = np.arange(len(self.tile_list))
+
+        # Shuffle multiple lists the same way??
