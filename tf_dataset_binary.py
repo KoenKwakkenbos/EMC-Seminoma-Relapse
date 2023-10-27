@@ -61,8 +61,8 @@ def _normalize_image_imagenet(tile, clinical_vars, label):
 
 def get_datagenerator(tile_paths, clinical_vars, labels, batch_size=4, train=True, imagenet=False):
     ds = tf.data.Dataset.from_tensor_slices((tile_paths,  clinical_vars, labels))
-    ds = ds.shuffle(buffer_size=len(tile_paths),
-                    reshuffle_each_iteration=True)
+    #ds = ds.shuffle(buffer_size=len(tile_paths),
+    #                reshuffle_each_iteration=True)
     
     if train:
         ds = ds.map(_process_image_augmentation,
@@ -79,7 +79,9 @@ def get_datagenerator(tile_paths, clinical_vars, labels, batch_size=4, train=Tru
                     num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
     ds = ds.batch(batch_size)
+    ds = ds.repeat()
     ds = ds.prefetch(tf.data.experimental.AUTOTUNE)
+    ds = ds.apply(tf.data.experimental.ignore_errors())
 
     return ds
 

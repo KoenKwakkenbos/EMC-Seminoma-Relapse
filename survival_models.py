@@ -115,6 +115,55 @@ def create_cnn_model(input_shape=(512, 512, 3), num_clinical_features=3):
     model = keras.Model(inputs=[input, clinical_input], outputs=outputs)
     return model
 
+def create_small_cnn_model(input_shape=(224, 224, 3), num_clinical_features=3, trainable=False):
+    """Creates a ResNet50-based binary classification model.
+
+    Parameters:
+    - input_shape (tuple, optional): The input shape of the model. Defaults to (224, 224, 3).
+    - trainable (bool, optional): Whether the ResNet50 layers should be trainable. Defaults to False.
+
+    Returns:
+    - keras.Model: The ResNet50-based binary classification model.
+    """
+
+    image_input = layers.Input(input_shape, name='input')
+    clinical_input = layers.Input(shape=(num_clinical_features,), name='clinical_input')
+
+    # resnet = ResNet50(include_top=False, weights='imagenet', pooling='max')(image_input)
+    
+    x = layers.Conv2D(4 ,kernel_size=(3,3), activation='relu')(image_input)
+    x = layers.BatchNormalization()(x)
+    x = layers.Conv2D(8 ,kernel_size=(3,3), activation='relu')(x)
+    x = layers.BatchNormalization()(x)
+    x = layers.MaxPooling2D(pool_size=((2,2)))(x)
+    x = layers.Conv2D(16 ,kernel_size=(3,3), activation='relu')(x)
+    x = layers.BatchNormalization()(x)
+    x = layers.Conv2D(16 ,kernel_size=(3,3), activation='relu')(x)
+    x = layers.BatchNormalization()(x)
+    x = layers.MaxPooling2D(pool_size=((2,2)))(x)
+    x = layers.Conv2D(32 ,kernel_size=(3,3), activation='relu')(x)
+    x = layers.BatchNormalization()(x)
+    x = layers.Conv2D(64 ,kernel_size=(3,3), activation='relu')(x)
+    x = layers.BatchNormalization()(x)
+    x = layers.GlobalAveragePooling2D()(x)
+    
+    # x = layers.Dropout(0.3)(resnet)
+    concatenated_features = layers.concatenate([x, clinical_input])
+    y = layers.BatchNormalization()(concatenated_features)
+    y = layers.Dropout(0.3)(y)
+    y = layers.Dense(256, activation='relu')(y)
+    y = layers.Dropout(0.3)(y)
+    y = layers.Dense(128, activation='relu')(y)
+    output = layers.Dense(1, activation='linear')(y)
+    model = keras.Model(inputs=[image_input, clinical_input], outputs=output)
+
+    # model.layers[1].trainable = trainable
+    
+    print(model.summary())
+
+    return model
+
+
 def create_MIL_model(input_shape=(224, 224, 3)):
     """
     Creates the classification model for the MIL approach.

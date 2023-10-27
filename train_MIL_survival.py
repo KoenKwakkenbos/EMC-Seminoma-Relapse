@@ -24,13 +24,13 @@ import pandas as pd
 import tensorflow as tf
 from tensorflow import keras
 from tqdm import tqdm
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import StratifiedKFold
 from sklearn.utils import resample
 import tensorflow.keras.backend as K
 import wandb
 
 from datagenerator_survival import DatagenMILSurv
-from models import create_MIL_model, create_classification_model
+from survival_models  import *
 from helpers import dir_path, tar_path
 from survival_model import CoxPHLoss, CindexMetric
 from pathlib import Path
@@ -39,24 +39,7 @@ import config
 
 print('starting')
 # Start a run, tracking hyperparameters
-wandb.init(
-    # set the wandb project where this run will be logged
-    project="survival-mil-resnet",
 
-    # track hyperparameters and run metadata with wandb.config
-    config={
-        "layer_1": 512,
-        "activation_1": "relu",
-        # "dropout": random.uniform(0.01, 0.80),
-        "layer_2": 10,
-        "activation_2": "softmax",
-        "optimizer": "sgd",
-        "loss": "sparse_categorical_crossentropy",
-        "metric": "accuracy",
-        "epoch": 8,
-        "batch_size": 256
-    }
-)
 
 def parse_arguments():
     """
@@ -102,15 +85,9 @@ class TrainAndEvaluateModel:
     def train_one_step(self, x, y_event, y_riskset):
         y_event = tf.expand_dims(y_event, axis=1)
         with tf.GradientTape() as tape:
-
-            # Run the forward pass of the layer.
-            # The operations that the layer applies
-            # to its inputs are going to be recorded
-            # on the GradientTape.
-            logits = model(x, training=True)  # Logits for this minibatch
-
-            # Compute the loss value for this minibatch.
+            logits = model(x, training=True) 
             train_loss = self.loss_fn(y_true=[y_event, y_riskset], y_pred=logits)
+
         # Use the gradient tape to automatically retrieve
         # the gradients of the trainable variables with respect to the loss.
         with tf.name_scope("gradients"):
@@ -140,31 +117,26 @@ class TrainAndEvaluateModel:
 
         self.train_ds.topk_dataset(topk_idx)
 
-        for x, y in self.train_ds:
+        for x, y in tqdm(self.train_ds):
             train_loss, logits = self.train_one_step(
                 x, y["label_event"], y["label_riskset"])
 
             step = int(step_counter)
-            # if step == 0:
-            #     func = self.train_one_step.get_concrete_function(
-            #         x, y["label_event"], y["label_riskset"]
-            #     )
 
             self.train_loss_metric.update_state(train_loss)
             self.train_cindex_metric.update_state(y, logits)
             step_counter.assign_add(1)
 
-
         # Display metrics
         mean_loss = self.train_loss_metric.result()
         train_cindex = self.train_cindex_metric.result()
-        self.log_metrics([train_cindex['cindex']], 'train', 'pat', mean_loss)
-        print(f"Epoch {step}: mean loss = {mean_loss:.4f}, train cindex = {train_cindex['cindex']:.4f}")
+        
+        print(f"Epoch {epoch}: mean loss = {mean_loss:.4f}, train cindex = {train_cindex['cindex']:.4f}")
         # Reset training metrics
         self.train_loss_metric.reset_states()
 
-        
-  
+        return mean_loss, train_cindex
+
     @tf.function
     def evaluate_one_step(self, x, y_event, y_riskset):
         y_event = tf.expand_dims(y_event, axis=1)
@@ -198,29 +170,43 @@ class TrainAndEvaluateModel:
             self.val_cindex_metric.update_state(y_val, val_logits)
 
         val_loss = self.val_loss_metric.result()
-
-        # for step, (x_batch_val, y_batch_val) in enumerate(tqdm(val_gen)):
-        #     loss_value = test_step(x_batch_val, y_batch_val)
-        #     avg_loss_val += loss_value
-        # avg_loss_val /= (step+1)
-        self.val_loss_metric.reset_states()
-
         val_cindex = self.val_cindex_metric.result()
-        self.log_metrics([val_cindex['cindex']], 'val', 'pat', val_loss)
 
+        self.val_loss_metric.reset_states()
         print(f"Validation: loss = {val_loss:.4f}, cindex = {val_cindex['cindex']:.4f}")
+    
+        return val_loss, val_cindex
 
     def train_and_evaluate(self):
         ckpt = tf.train.Checkpoint(
             step=tf.Variable(0, dtype=tf.int64),
             optimizer=self.optimizer,
             model=self.model)
-        
-        for epoch in range(self.num_epochs):
-            self.train_one_epoch(ckpt.step, epoch)
-            self.evaluate(ckpt.step)
+        ckpt_manager = tf.train.CheckpointManager(
+            ckpt, str(self.model_dir), max_to_keep=2)
+        if ckpt_manager.latest_checkpoint:
+            ckpt.restore(ckpt_manager.latest_checkpoint)
+            print(f"Latest checkpoint restored from {ckpt_manager.latest_checkpoint}.")
+
+        for epoch in range(1, self.num_epochs + 1):
+            train_loss, train_cindex = self.train_one_epoch(ckpt.step, epoch)
+            val_loss, val_cindex =self.evaluate(ckpt.step)
+
+            # log results:
+            self.log_metrics([train_cindex['cindex']], 'train', 'pat', train_loss)
+            self.log_metrics([val_cindex['cindex']], 'val', 'pat', val_loss)
+            
+            # Datagenerators end of epoch (shuffle etc)
             self.train_ds.on_epoch_end()
             self.val_ds.on_epoch_end()
+
+            save_path = ckpt_manager.save()
+            print(f"Saved checkpoint for step {ckpt.step.numpy()}: {save_path}")
+
+            if (epoch + 1) % 12 == 0:
+                new_lr = config.train_settings['learning_rate'] * 0.1
+                K.set_value(self.optimizer.learning_rate, new_lr)
+                print(f"Learning rate set to: {self.optimizer.learning_rate}")
 
     def group_argtopk(self, groups, data, k=10):
         """
@@ -237,7 +223,7 @@ class TrainAndEvaluateModel:
         - List: The indices of all the top ranking tiles.
         """
 
-        # minus to get reverse sort
+        # minus to get reverse sort??
         data = -data.numpy().ravel()
         order = np.lexsort((data, groups))
         groups = np.array(groups)
@@ -249,7 +235,7 @@ class TrainAndEvaluateModel:
         return list(order[index])
 
     def group_max(self, groups, data, nmax):
-        # minus to get reverse sort
+        # minus to get reverse sort??
         data = -data.numpy().ravel()
         out = np.empty(nmax)
         out[:] = np.nan
@@ -279,48 +265,71 @@ class TrainAndEvaluateModel:
             #f"{prefix}_{split}_tpr": metrics[8]
         })
 
-
 if __name__ == "__main__":
     # parsed_args = parse_arguments()
     patient_data = pd.read_excel(config.cohort_settings['cohort_file'], header=0, engine="openpyxl").set_index('ID').dropna()
 
-    train_index, test_index, _, _ = train_test_split(
-                                        patient_data.index,
-                                        patient_data['Event'],
-                                        test_size=0.2,
-                                        random_state=0)
-        
-    # New model gets instantiated, so clear cache
-    K.clear_session()
-    print(f"  Train: index={train_index}")
-    print(f"  Test:  index={test_index}")
+    if not config.cohort_settings['synchronous']:
+        patient_data = patient_data.drop(patient_data[patient_data['Synchronous'] == 1].index)
+    if not config.cohort_settings['treatment']:
+        patient_data = patient_data.drop(patient_data[patient_data['Treatment'] == 1].index)
 
-    INPUT_PATH = './tiles-normalized/Training/Oversampled'
 
-    train_gen = DatagenMILSurv(patient_data,
-                           512,
-                           INPUT_PATH,
-                           batch_size=32,
-                           train=True,
-                           imagenet=False)
-    val_gen = DatagenMILSurv(patient_data,
-                         512,
-                         INPUT_PATH,
-                         batch_size=32,
-                         train=False,
-                         imagenet=False)
+    skf = StratifiedKFold(n_splits=5)
+    skf.get_n_splits(patient_data.index, patient_data['Event'])
 
-    model = create_classification_model(input_shape=(512, 512, 3))
+         
+    for i, (train_index, val_index) in enumerate(skf.split(patient_data.index, patient_data['Event'])):
+        wandb.init(
+            # set the wandb project where this run will be logged
+            project="survival-mil-customnet",
 
-    trainer = TrainAndEvaluateModel(
-        model=model,
-        model_dir=Path("ckpts-mnist-cnn"),
-        train_dataset=train_gen,
-        eval_dataset=val_gen,
-        learning_rate=0.0001,
-        num_epochs=5,
-    )
+            # track hyperparameters and run metadata with wandb.config
+            config={
+                'Fold': i+1,
+                'Model': 'ResNet50',
+                **config.cohort_settings,
+                **config.model_settings,
+                **config.train_settings
+            },
+            reinit=True
+        )
+        # New model gets instantiated, so clear cache
+        K.clear_session()
+        print(f"Fold {i+1}:")
+        print(f"  Train: index={train_index}")
+        print(f"  Test:  index={val_index}")
 
-    trainer.train_and_evaluate()
+        patient_data_train = patient_data.iloc[train_index].copy()
+        patient_data_val = patient_data.iloc[val_index].copy()
 
-    print("all done")
+        clinical_vars = ['RTI', 'LVI', 'Size']
+
+        train_gen = DatagenMILSurv(patient_data_train,
+                            512,
+                            config.cohort_settings['data_path'],
+                            batch_size=32,
+                            train=True,
+                            imagenet=True)
+        val_gen = DatagenMILSurv(patient_data_val,
+                            512,
+                            config.cohort_settings['data_path'],
+                            batch_size=32,
+                            train=False,
+                            imagenet=True)
+
+        model = create_imagenet_model(input_shape=(512, 512, 3), num_clinical_features=4, trainable=False)
+        print(model.summary())
+
+        trainer = TrainAndEvaluateModel(
+            model=model,
+            model_dir=Path(f"Custom_MIL_Survival_fold_{i+1}"),
+            train_dataset=train_gen,
+            eval_dataset=val_gen,
+            learning_rate=0.001,
+            num_epochs=50,
+        )
+        trainer.train_and_evaluate()
+
+        wandb.join()
+        print("all done")

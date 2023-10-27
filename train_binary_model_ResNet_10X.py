@@ -114,10 +114,14 @@ class TrainAndEvaluateModel:
 
         model.fit(
             self.train_ds,
+            steps_per_epoch=steps_per_epoch,
             validation_data=self.val_ds,
             epochs=self.num_epochs,
             callbacks=[early_stopping, model_checkpoint, reduce_lr, WandbMetricsLogger()],
-            verbose=1
+            verbose=1,
+            validation_steps=validation_steps,
+            use_multiprocessing=True,
+            workers=8
         )
 
 # STRATIFIED 5-FOLD CROSS VALIDATION
@@ -165,10 +169,13 @@ for i, (train_index, val_index) in enumerate(skf.split(patient_data.index, patie
 
     tiles_train, clin_train, labels_train, tiles_val, clin_val, labels_val = train_val_split(tile_list, patient_data_train, patient_data_val, config.model_settings['clinical_vars'])
 
+    steps_per_epoch = len(tiles_train) // config.train_settings['batch_size']
+    validation_steps = len(tiles_val) // config.train_settings['batch_size']
+
     train_gen = get_datagenerator(tiles_train, clin_train, labels_train, config.train_settings['batch_size'], train=True, imagenet=True)
     val_gen = get_datagenerator(tiles_val, clin_val, labels_val, config.train_settings['batch_size'], train=False, imagenet=True)
 
-    model = create_imagenet_model(input_shape=(config.model_settings['tile_size'], config.model_settings['tile_size'], 3), num_clinical_features=0)
+    model = create_small_cnn_model(input_shape=(config.model_settings['tile_size'], config.model_settings['tile_size'], 3), num_clinical_features=0)
     print(model.summary())
 
     trainer = TrainAndEvaluateModel(

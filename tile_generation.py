@@ -139,11 +139,11 @@ def tile_slide(annotation_path, tile_size, downsample):
         tile_box = box(x, y, x + (tile_size[0] * downsample), y + (tile_size[1] * downsample))
         for poly in annotation_polys:
             if poly.intersects(tile_box):
-                if poly.intersection(tile_box).area / tile_box.area > 0.5:
+                if poly.intersection(tile_box).area / tile_box.area > 0.8:
                     tile_coordinates.append((int(x), int(y)))
             
     # REMOVE THIS!!!
-    # tile_coordinates = random.choices(tile_coordinates, k=5)
+    # tile_coordinates = random.choices(tile_coordinates, k=200)
     # --------------
 
     count = len(tile_coordinates)
@@ -200,8 +200,9 @@ def process_and_save_tile(slide, coord, tile_size, downsample, output_path):
     tissue_percentage = (tissue_pixels / (gray_tile.shape[0] * gray_tile.shape[1])) * 100
 
     if tissue_percentage > 80:
-        cv2.imwrite(os.path.join(output_path, f"{os.path.basename(output_path)}_{coord[0]}_{coord[1]}.png"),
-                    cv2.cvtColor(tile_array, cv2.COLOR_RGBA2BGRA))
+        cv2.imwrite(os.path.join(output_path, f"{os.path.basename(output_path)}_{coord[0]}_{coord[1]}.jpg"),
+                    cv2.cvtColor(tile_array, cv2.COLOR_RGBA2BGRA),
+                    [cv2.IMWRITE_JPEG_QUALITY, 90])
 
 
 def main():

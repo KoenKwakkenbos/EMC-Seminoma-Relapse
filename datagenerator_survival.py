@@ -81,7 +81,7 @@ class Datagen(tf.keras.utils.Sequence):
         # Precompute the list of all image paths
         self.tile_list = [os.path.join(subdir, file) 
                          for subdir, dirs, files in os.walk(self.tile_path)
-                         for file in files if file.lower().endswith(('.png'))
+                         for file in files if file.lower().endswith(('.png', '.jpg'))
                          and extract_identifier(file) in self.df.index]
         
         if self.train:
@@ -171,7 +171,7 @@ class Datagen(tf.keras.utils.Sequence):
         # X_img = np.array([self._process_image(self.tile_list[k]) for k in indexes])
         
         batch_ids = [extract_identifier(os.path.basename(file)) for file in to_process]
-        X_clin = np.array(self.df.loc[batch_ids][['LVI', 'RTI', 'Size']])
+        X_clin = np.array(self.df.loc[batch_ids][['LVI', 'RTI', 'Size', 'Treatment']])
         event = np.array(self.df.loc[batch_ids]['Event'])
         time = np.array(self.df.loc[batch_ids]['Time'])
 
